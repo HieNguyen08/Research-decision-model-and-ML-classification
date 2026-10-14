@@ -51,8 +51,10 @@ Repo đã **public** nên Colab mở và clone được ngay, không cần token
 2. *(Tuỳ chọn, để đẩy kết quả từ Colab lên GitHub)*: **GitHub token**: Settings → Developer settings → *Fine-grained tokens*, chọn repo này, quyền **Contents: Read and write**.
 3. Trong Colab: biểu tượng **🔑 Secrets** ở thanh trái → thêm `HF_TOKEN` (và `GH_TOKEN` nếu cần) → bật *Notebook access*.
    Notebook 05: mặc định chạy **WaterSheep** (mã nguồn mở, miễn phí, không cần key; nên bật GPU). Có credit Jev thì thêm `TYPESAFE_API_KEY` để so sánh thêm Jev.
-4. Notebook 03: *Runtime → Change runtime type → T4 GPU*.
-5. Ô đầu tiên tự clone repo, cài thư viện và thêm `src/` vào path. Ô cuối có `PUSH_RESULTS = True` để commit kết quả lên nhánh **`colab-results`** (sau đó mở PR vào `main`).
+4. Notebook 03: *Runtime → Change runtime type* → **A100** (lần chạy tham khảo: A100-SXM4-40GB, `BATCH = 32`) hoặc **L4** (`BATCH = 16`). T4 chạy được nhưng chậm.
+   **Không chọn TPU**: code dùng PyTorch/CUDA, trên TPU notebook sẽ chỉ chạy chế độ thử (DRY_RUN). Notebook 05 (WaterSheep) chỉ cần L4/T4.
+5. Ô đầu tiên tự clone repo, cài thư viện và thêm `src/` vào path. Ở ô cuối, đặt `PUSH_RESULTS = True` để commit thư mục `results/` lên nhánh **`colab-results`** (sau đó mở PR vào `main`).
+   Nếu chỉ lưu notebook (*File → Save a copy in GitHub*), các file kết quả sẽ không đi kèm. Khi đó dùng `python scripts/extract_notebook_results.py` để trích bảng từ output đã lưu.
 
 > Trước khi các PR được merge, mở notebook theo nhánh của PR, ví dụ:
 > `https://colab.research.google.com/github/HieNguyen08/Research-decision-model-and-ML-classification/blob/research/docs-report/notebooks/03_llm_moderation_colab.ipynb`

@@ -1,7 +1,8 @@
 # Báo cáo kết quả: Mô hình ra quyết định & phân loại ML/LLM cho Trust & Safety trong CS e-commerce
 
-> Tổng hợp từ notebook 01–04 và phụ lục A1–A2. Mọi số liệu đều tái lập được bằng `scripts/` và `notebooks/`.
-> Phần LLM (notebook 03) và Jev (notebook 05) đã sẵn sàng nhưng **cần chạy trên Colab** (GPU / API key): container nghiên cứu không truy cập được Hugging Face và API của TypeSafe, nên chưa có số liệu LLM/Jev trong báo cáo này.
+> Tổng hợp từ notebook 01–05 và phụ lục A1–A2. Mọi số liệu đều tái lập được bằng `scripts/` và `notebooks/`.
+> Notebook 03 (LLM, guard model, classifier chuyên dụng) và 05 (decision model zero-shot WaterSheep) đã chạy trên **Colab GPU (A100)**. Số liệu được trích từ output đã lưu (`scripts/extract_notebook_results.py` → `results/llm`, `results/jev`).
+> **Jev thật (TypeSafe AI) chưa được chạy** vì cần credit trả phí; WaterSheep là bản mở cùng giao thức.
 
 ## 1. Tóm tắt điều hành
 
@@ -15,6 +16,9 @@
 | Chọn mô hình khi nhiều tiêu chí xung đột? | MCDM (AHP + TOPSIS/VIKOR/PROMETHEE/EDAS + SMAA): kết quả **phụ thuộc mạnh vào chuẩn hoá**; phải kiểm tra độ nhạy. Với kiểm duyệt CS, LogReg đứng đầu ổn định (P(top1) ≈ 1.0) | nb 04, A2 |
 | Xử lý từng ca thế nào? | **Bayes chi phí kỳ vọng + phân bổ review theo lợi ích** thắng luật cố định 3.9–5.2% khi năng lực review ≥ 5%. Nhưng lợi thế **mất hết nếu chi phí bị ước lượng sai**, nên cần định lượng chi phí trước | nb 04 |
 | Tự động hoá được bao nhiêu? | 84% tin nhắn với ≤ 1% lỗi; 94% với ≤ 2% lỗi (selective classification) | nb 04 |
+| LLM nhỏ (1–4B) thay được TF-IDF không? | **Chưa**: tốt nhất là llama-3.2-3b 8-shot với PR-AUC 0.726, so với 0.756. Nhưng **ghép LLM zero-shot + TF-IDF** đạt **0.793 (+4.9%)**, cao nhất nghiên cứu. LLM thắng lớn khi dữ liệu lệch phân phối (TweetEval-hate 0.761 so với 0.511) | nb 03 |
+| Guard model (Llama Guard, Qwen3Guard, ShieldGemma)? | **Không hợp nếu dùng nguyên trạng** (PR-AUC 0.45–0.60): danh mục vi phạm không có lăng mạ/spam; chậm 85–570 ms/tin | nb 03 |
+| Decision model zero-shot (họ Jev, bản mở WaterSheep)? | Với tin nhắn: đạt 91% PR-AUC của TF-IDF mà không cần nhãn, bền nhất trước né bộ lọc, nhưng **quá tự tin** nên cần khoảng 50 nhãn để hiệu chỉnh. Với đơn hàng: **không dùng được** (AUC < 0.5) | nb 05 |
 
 ## 2. Kết quả chi tiết
 
@@ -43,6 +47,10 @@
 * **Phụ lục A2**, chọn mô hình trên 14 dataset UCI: các phương pháp đồng thuận trung bình (Kendall τ 0.48–0.53). **Chuẩn hoá vector so với min-max cho τ = −0.07**: chuẩn hoá vector nén AUC (hệ số biến thiên 4.6%) trong khi thời gian (hệ số biến thiên 173%) lấn át, dẫn tới xếp DT-CART hạng 2 một cách vô lý.
 * **Notebook 04**: chiều ngược lại, min-max *phóng đại* tiêu chí gần như hằng số (Robustness, hệ số biến thiên 1%). → Quy trình đề xuất: (1) kiểm tra hệ số biến thiên của từng tiêu chí; (2) chạy ≥ 3 phương pháp và ≥ 2 kiểu chuẩn hoá; (3) báo cáo **SMAA** (xác suất đạt hạng 1) thay vì một xếp hạng duy nhất.
 * **SMAA ngẫu nhiên trên fold CV** (đề xuất cải tiến): lan truyền đồng thời bất định trọng số và bất định đo lường.
+* **Trọng số do mô hình đề xuất (nb 04 B7):** mọi nguồn (3 LLM, WaterSheep) đều giữ LogReg ở hạng 1.
+  * LLM không bao giờ cho ma trận AHP nhất quán (CR < 0.1: 0/15 lần).
+  * WaterSheep nhất quán (CR ≈ 0.01) nhưng trọng số gần đều và gần như không đổi giữa hai kịch bản: τ = 0.89 so với AHP live-chat, nhưng chỉ 0.42 so với offline-audit.
+  * → **CR thấp không chứng minh phán đoán tốt.** Trọng số phải do người chịu trách nhiệm quyết định.
 
 ### 2.4 Chính sách triage (chi phí trên 1000 ca)
 | Năng lực review | Luật 0.5/0.9 | Một ngưỡng tối ưu | Scorecard MCDM | Bayes thô | Bayes hiệu chỉnh |
@@ -53,6 +61,60 @@
 | 20% | 1065.6 | 1055.5 | 1098.4 | **1009.7** | 1021.4 |
 
 * Chi phí bị ước lượng sai (12 kịch bản chi phí thật): regret trung bình là Bayes-biết-chi-phí-thật 1170.8 < luật 1240.9 ≈ Bayes-giả-định 1246.6 < ngưỡng 1260.8 < scorecard MCDM 1370.6.
+
+### 2.5 LLM, guard model, classifier chuyên dụng (nb 03, Colab A100, 300 tin/task)
+PR-AUC trung bình 6 task (cấu hình tốt nhất của mỗi mô hình, cùng tập con test):
+
+| Mô hình | PR-AUC TB | ROC-AUC TB | recall@5%FPR | ms/tin (A100) |
+|---|---|---|---|---|
+| **qwen3-4b zero-shot ⊕ TF-IDF LogReg** (rank-average, w = 0.3) | **0.793** | – | – | khoảng 30 |
+| TF-IDF Stacking / LogReg | 0.761 / 0.756 | 0.857 / 0.853 | 0.596 / 0.594 | < 1 (CPU) |
+| llama-3.2-3b (8-shot) | 0.726 | **0.877** | 0.546 | khoảng 22 |
+| qwen3-4b* / phi-4-mini / qwen2.5-3b (8-shot) | 0.712 / 0.703 / 0.697 | 0.861 / 0.864 / 0.849 | 0.531 / 0.478 / 0.483 | 20–30 |
+| qwen2.5-1.5b / qwen3-1.7b / gemma-3-1b (8-shot) | 0.683 / 0.666 / 0.560 | 0.847 / 0.831 / 0.754 | | 15–20 |
+| ShieldGemma-2B / Qwen3Guard-4B / -0.6B / Llama-Guard-3-1B | 0.598 / 0.551 / 0.515 / 0.452 | 0.80 / 0.82 / 0.77 / 0.69 | 0.26–0.37 | 85–570 |
+
+\* qwen3-4b bị đánh giá thấp do lỗi bão hoà float32 (đã sửa trong `drm.llm`; cần chạy lại riêng mô hình này).
+
+* **LLM xếp hạng tổng thể tốt hơn nhưng vùng điểm cao nhiễu hơn:** llama-3.2-3b có ROC-AUC cao hơn TF-IDF, nhưng PR-AUC và recall@5%FPR thấp hơn. Với kiểm duyệt (cần FPR thấp), PR-AUC và recall@FPR là thước đo đúng.
+* **Theo task:**
+  * LLM thắng rõ trên **TweetEval-hate** (0.761 so với 0.511; tập test lệch phân phối so với train).
+  * LLM thua rõ trên **Davidson** (≤ 0.31 so với 0.55; ranh giới hate/offensive là quy ước của người gán nhãn) và **HateXplain** (0.84 so với 0.91).
+  * Spam: qwen3-4b 0.980, ngang TF-IDF.
+* **Few-shot** giúp +0.01 đến +0.13 (mô hình yếu được lợi nhiều nhất).
+* **Contextual calibration** không đổi PR-AUC với bài toán nhị phân, vì là phép tịnh tiến log-odds.
+* **Ghép LLM + TF-IDF** (w = 0.3): +0.024 đến +0.037 với các LLM 3–4B; +0.007 đến +0.013 với LLM 1.5–1.7B.
+* **Guard model:** hiệu năng thấp chủ yếu do **danh mục vi phạm không khớp** với nhu cầu CS:
+  * Llama Guard 3 không coi lăng mạ là vi phạm (Jigsaw 0.27);
+  * Qwen3Guard không có nhóm spam (SMS 0.28–0.39);
+  * ShieldGemma nhận chính sách viết bằng lời nên tốt nhất trong nhóm.
+* **Classifier fine-tune sẵn:**
+  * Nhiều điểm cao là do **rò rỉ dữ liệu**, được đánh dấu ở cột `leakage`: toxic-bert trên Jigsaw 0.982, bert-tiny trên SMS 0.970, roberta-hate trên TweetEval-hate 0.894 (nghi rò rỉ).
+  * Khi bỏ các ô đó, chúng thắng TF-IDF trên TweetEval-offensive (0.76–0.78 so với 0.70), thua trên HateXplain và Jigsaw. Rất nhanh: 0.5–2 ms/tin.
+* **LLM làm chuyên gia AHP:** JSON hợp lệ 15/15 lần, nhưng CR < 0.1 ở 0/15 lần. LLM dồn 38–60% trọng số vào Quality dù kịch bản nhấn mạnh độ trễ và ngân sách GPU.
+
+### 2.6 Decision model zero-shot: WaterSheep (bản mở họ Jev) và Jev-like Qwen (nb 05)
+| | WaterSheep | Jev-like Qwen2.5-1.5B | TF-IDF LogReg (đã huấn luyện) |
+|---|---|---|---|
+| PR-AUC TB tin nhắn (6 task) | 0.688 (0.698 với câu hỏi theo task) | 0.560 | 0.756 |
+| ECE thô → sau Platt với 50 nhãn/task | 0.269 → **0.053** | 0.230 → 0.070 | 0.095 |
+| PR-AUC giảm khi obfuscation 30% | **−0.9%** | −5.0% | −4.5% |
+| Ghép với TF-IDF (w = 0.25) | 0.773 (+2.2%) | | |
+| ROC-AUC zero-shot: bùng hàng / chargeback (mô phỏng) | **0.411 / 0.251** (ngược) | 0.710 / 0.732 | 0.787 / 0.895 (huấn luyện đủ dữ liệu) |
+| Triage Bayes (chi phí / 1000 ca, review 5%) | 1746 | | 1090 (TF-IDF + GBM) |
+| AHP: CR / trọng số | 0.01 / gần đều, không đổi theo kịch bản | | |
+| Độ trễ p50 / chi phí | 39 ms / 0 USD (GPU Colab) | 47 ms | |
+
+* **Tin nhắn:** WaterSheep chỉ khoảng 150M tham số nhưng đạt 91% PR-AUC của TF-IDF mà không cần nhãn.
+  * Ngang hoặc hơn TF-IDF ở Jigsaw (0.913), offensive (0.780 so với 0.662) và spam (1.000).
+  * Rất kém ở Davidson-hate (0.129).
+  * Ngang các LLM 3–4B zero-shot dù nhỏ hơn khoảng 20 lần.
+* **Quá tự tin:** dự đoán 0.8–0.97 nhưng tần suất thật chỉ 0.35–0.45. Vì vậy Bayes dùng xác suất thô của WaterSheep (1746) còn **kém luật ngưỡng** (1641); phải hiệu chỉnh trước.
+* **Đơn hàng (JSON dạng bảng):** câu hỏi Yes/No của WaterSheep cho tín hiệu *ngược*, và prior của nó không giúp cold-start (≤ +0.004 AUC).
+  Jev-like Qwen (LLM) đọc JSON tốt hơn nhiều: bùng hàng 0.71, ngang LogReg huấn luyện với khoảng 128 đơn có nhãn.
+* **`action` / `severity`** chưa dùng để tự động hoá được: `block_and_report` cho 53% tin bình thường của TweetEval-hate; `action` trực tiếp có chi phí cao nhất (1891).
+* **Chi phí Jev thật cho cùng khối lượng** (8402 lần gọi, 4.94M token) theo giá công bố: khoảng **0.21 USD**.
+* Đối chiếu từng giả thuyết H0–H7: docs/04 mục 6.
 
 ## 3. Đóng góp / hướng cải tiến đã hiện thực
 
@@ -65,18 +127,28 @@
 | C5 | Triage Bayes + phân bổ năng lực review theo lợi ích kỳ vọng | −3.9% đến −5.2% chi phí so với luật cố định (năng lực ≥ 5%) |
 | C6 | Đánh giá theo chi phí phụ thuộc giá trị đơn | đổi mô hình được chọn (CatBoost thay vì RF-balanced) |
 | C7 | Regularize boosting khi lớp cực hiếm | PR-AUC từ 0.17–0.44 lên 0.80 |
-| C8 | Ensemble LLM + TF-IDF; LLM làm chuyên gia AHP (đo CR, ẩn danh tên) | **chờ chạy Colab** (nb 03) |
+| C8 | Ensemble LLM zero-shot + TF-IDF (rank-average); LLM làm chuyên gia AHP (đo CR) | PR-AUC 0.756 → **0.793 (+4.9%)**, cao nhất nghiên cứu; AHP của LLM không nhất quán (0/15) |
 | C9 | Bộ mô phỏng bùng hàng + schema dữ liệu; pipeline hoá đơn giả | nền tảng để cắm dữ liệu nội bộ |
-| C10 | **Jev (decision model zero-shot)**: client có cache, adapter Jev-like mở, 7 thí nghiệm (kiểm duyệt, hiệu chỉnh, obfuscation, ensemble, cold-start bùng hàng, triage Bayes, AHP) | **chờ chạy với API key** (nb 05, docs/04) |
+| C10 | **Decision model zero-shot họ Jev**: client có cache, adapter WaterSheep (mở) và Jev-like, 7 thí nghiệm | WaterSheep: 91% PR-AUC của TF-IDF không cần nhãn; bền nhất trước obfuscation (−0.9%); 50 nhãn đưa ECE từ 0.27 xuống 0.05; ghép với TF-IDF +2.2%; **thất bại với đơn hàng**. Jev thật chờ credit (khoảng 0.21 USD) |
+| C11 | Phát hiện & sửa lỗi bão hoà float32 khi chấm LLM (điểm hoà nhau ở p = 1) | xếp hạng theo log-odds; có test hồi quy; ảnh hưởng tới số của qwen3-4b |
 
 ## 4. Hạn chế
 * Chi phí trong `CostModel`/`COSTS` là giả định; bùng hàng/chargeback dùng dữ liệu mô phỏng.
 * Dữ liệu kiểm duyệt là Wikipedia/Twitter/SMS, **không phải chat CS**; siêu tham số mặc định; thời gian đo trên CPU dùng chung.
-* Chưa có kết quả LLM/guard model/transformer (cần GPU).
+* LLM/WaterSheep chỉ chấm 300 tin/task. Chênh lệch < 0.03 PR-AUC cần paired bootstrap trước khi kết luận. Số được trích từ output notebook đã làm tròn 3 chữ số; chưa có file điểm `.npz` của lần chạy Colab.
+* qwen3-4b bị đánh giá thấp do lỗi bão hoà (đã sửa, cần chạy lại). Chưa đo độ bền trước obfuscation của LLM ở nb 03. Chưa chạy Jev thật.
 
 ## 5. Lộ trình tiếp theo
-1. **Chạy notebook 05** trên Colab GPU: mặc định dùng **WaterSheep** (mở, miễn phí). Nếu có credit Jev thì thêm `TYPESAFE_API_KEY` (khoảng 8 nghìn lần gọi, dưới 0.2 USD theo giá công bố) để so sánh trực tiếp.
-2. **Chạy notebook 03 trên Colab** (Qwen2.5/Qwen3, Phi-4-mini, Gemma-3, Llama-3.2, Llama Guard 3, Qwen3Guard, ShieldGemma) rồi chạy lại notebook 04 để đưa LLM vào MCDM.
+1. ~~Chạy notebook 03, 05 trên Colab~~ (xong). Việc còn lại:
+   * chạy lại riêng qwen3-4b sau bản sửa bão hoà;
+   * chạy lại E5 với prior của Jev-like Qwen (LLM đọc JSON đơn hàng tốt hơn WaterSheep);
+   * nếu có credit, thêm `TYPESAFE_API_KEY` để so Jev thật (khoảng 0.21 USD);
+   * nhớ đặt `PUSH_RESULTS = True` hoặc tải thư mục `results/` để giữ file điểm.
+2. **Kiến trúc đề xuất cho chat CS** (từ nb 03–05):
+   * TF-IDF huấn luyện trên nhãn nội bộ, ghép (rank-average) với một LLM 3–4B hoặc WaterSheep đã hiệu chỉnh bằng khoảng 50 nhãn;
+   * đưa xác suất vào chính sách Bayes chi phí (nb 04);
+   * LLM sinh giải thích cho nhân viên;
+   * không dùng guard model nguyên trạng, và không để mô hình zero-shot tự chọn hành động.
 3. **Dữ liệu nội bộ:** gán nhãn khoảng 2–5k tin nhắn chat CS (toxic/abusive/threat/spam-scam) và lịch sử đơn bùng/chargeback; chạy lại toàn bộ bằng `load_internal_csv` và `load_internal_orders`.
 4. **Định lượng chi phí** với CS lead, finance và legal (AHP/BWM để ra tỉ lệ chi phí), rồi cập nhật `CostModel`.
 5. Fine-tune transformer nhỏ (DistilRoBERTa) hoặc LoRA cho LLM trên dữ liệu nội bộ; active learning với LLM làm bộ gán nhãn sơ bộ.
