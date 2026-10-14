@@ -87,6 +87,14 @@ Những vấn đề đã được biết:
   * Khung LLM-based MCDM tổng quát (arXiv 2502.15778).
   * Câu hỏi mở: **tính nhất quán** (CR) và **thiên lệch theo tên phương án** của LLM. Notebook 03 kiểm tra cả hai.
 
+### 3.1 Decision model chuyên dụng: Jev và họ "System One"
+* **Jev** (TypeSafe AI, 09/2026) là mô hình **phân biệt**. Nó nhận *state* (văn bản/JSON) cùng nhiều câu hỏi có kiểu: Noul (có/không), Choice (chọn nhãn), Score (thang bậc). Kết quả là **xác suất đã hiệu chỉnh** cho mọi câu hỏi trong một lần gọi; mô hình được huấn luyện bằng **RLCD** (Reinforcement Learning for Calibrated Decisions).
+* **Bằng chứng:**
+  * Guo et al. (2026): AUROC trung vị 0.886 **zero-shot** trên 44 benchmark lỗi alignment; thắng baseline có giám sát ở 25/31 benchmark; rẻ hơn LLM-judge khoảng 63 lần.
+  * Cisco (2026): mô hình huấn luyện theo chính sách nội bộ vẫn thắng ở FPR nghiêm ngặt.
+  * Cộng đồng: quá tự tin khi người gán nhãn bất đồng; dễ bị tấn công đối kháng.
+* **Liên hệ với đề tài:** Jev vừa là bộ dự báo zero-shot (giải quyết cold-start cho chat CS và bùng hàng), vừa là đầu vào đã hiệu chỉnh cho tầng quyết định Bayes. Chi tiết, rủi ro và giả thuyết kiểm định ở [docs/04_jev_system_one.md](04_jev_system_one.md); thí nghiệm ở notebook 05.
+
 ## 4. Gian lận thanh toán, chargeback & bùng hàng COD
 
 * **Gian lận thẻ:** dataset ULB (Dal Pozzolo et al., 2015a) với 0.17% gian lận. Các thách thức chính:
@@ -129,6 +137,7 @@ Những vấn đề đã được biết:
 | G7 | Không có dữ liệu bùng hàng công khai | Schema + bộ mô phỏng có cơ chế công khai; hook dữ liệu nội bộ; hướng uplift modeling | nb 02 |
 | G8 | Hoá đơn giả bằng AI | Pipeline nhiều lớp + tích hợp điểm vào triage | docs/03 |
 | G9 | Cây đơn kém chính xác nhưng dễ diễn giải | Cắt tỉa cost-complexity (+0.039 AUC, số lá giảm 5 lần), cây xiên, luật cho nhân viên | A1, nb 01–02 |
+| G10 | Thiếu dữ liệu gán nhãn (cold-start) cho chat CS / bùng hàng | **Decision model zero-shot (Jev)** + hiệu chỉnh bằng ít nhãn + tầng Bayes chi phí; so với LLM mở không RLCD | nb 05, docs/04 |
 
 ---
 
@@ -159,6 +168,7 @@ Những vấn đề đã được biết:
 * Fernández-Delgado, M., Cernadas, E., Barro, S., & Amorim, D. (2014). Do we need hundreds of classifiers to solve real world classification problems? *JMLR*, 15.
 * Friedman, J. H. (2001). Greedy function approximation: A gradient boosting machine. *Annals of Statistics*, 29(5).
 * Frosst, N., & Hinton, G. (2017). Distilling a neural network into a soft decision tree. arXiv:1711.09784.
+* Guo, R. et al. (2026). Just Ask Jev: Reinforcement learning for calibrated decisions as a zero-shot detector of AI alignment failures. arXiv:2609.29429.
 * Gardner, J., Perdomo, J. C., & Schmidt, L. (2024). Large scale transfer learning for tabular data via language modeling. *NeurIPS*. arXiv:2406.12031.
 * Geifman, Y., & El-Yaniv, R. (2017). Selective classification for deep neural networks. *NeurIPS*.
 * Geurts, P., Ernst, D., & Wehenkel, L. (2006). Extremely randomized trees. *Machine Learning*, 63.
@@ -172,6 +182,7 @@ Những vấn đề đã được biết:
 * Keshavarz Ghorabaee, M., Zavadskas, E. K., Olfat, L., & Turskis, Z. (2015). Multi-criteria inventory classification using a new method of evaluation based on distance from average solution (EDAS). *Informatica*, 26(3).
 * Kumar, D., AbuHashem, Y., & Durumeric, Z. (2024). Watch your language: Investigating content moderation with large language models. *ICWSM*, 18, 865–878.
 * Lahdelma, R., Hokkanen, J., & Salminen, P. (1998). SMAA – Stochastic multiobjective acceptability analysis. *European Journal of Operational Research*, 106(1).
+* Ling, G., Xue, M., & Ye, Z. (2026). Jev in the wild: A data-driven analysis of the Jev model's functionality, applications and ecosystem. arXiv:2609.30216.
 * Lin, J., Zhong, C., Hu, D., Rudin, C., & Seltzer, M. (2020). Generalized and scalable optimal sparse decision trees. *ICML*.
 * Madras, D., Pitassi, T., & Zemel, R. (2018). Predict responsibly: Improving fairness and accuracy by learning to defer. *NeurIPS*.
 * Markov, T. et al. (2023). A holistic approach to undesired content detection in the real world. *AAAI*.

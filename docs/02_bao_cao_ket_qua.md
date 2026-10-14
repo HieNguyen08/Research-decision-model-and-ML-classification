@@ -1,7 +1,7 @@
 # Báo cáo kết quả: Mô hình ra quyết định & phân loại ML/LLM cho Trust & Safety trong CS e-commerce
 
 > Tổng hợp từ notebook 01–04 và phụ lục A1–A2. Mọi số liệu đều tái lập được bằng `scripts/` và `notebooks/`.
-> Phần LLM (notebook 03) đã sẵn sàng nhưng **cần chạy trên Colab GPU**: container nghiên cứu không truy cập được Hugging Face, nên chưa có số liệu LLM trong báo cáo này.
+> Phần LLM (notebook 03) và Jev (notebook 05) đã sẵn sàng nhưng **cần chạy trên Colab** (GPU / API key): container nghiên cứu không truy cập được Hugging Face và API của TypeSafe, nên chưa có số liệu LLM/Jev trong báo cáo này.
 
 ## 1. Tóm tắt điều hành
 
@@ -67,6 +67,7 @@
 | C7 | Regularize boosting khi lớp cực hiếm | PR-AUC từ 0.17–0.44 lên 0.80 |
 | C8 | Ensemble LLM + TF-IDF; LLM làm chuyên gia AHP (đo CR, ẩn danh tên) | **chờ chạy Colab** (nb 03) |
 | C9 | Bộ mô phỏng bùng hàng + schema dữ liệu; pipeline hoá đơn giả | nền tảng để cắm dữ liệu nội bộ |
+| C10 | **Jev (decision model zero-shot)**: client có cache, adapter Jev-like mở, 7 thí nghiệm (kiểm duyệt, hiệu chỉnh, obfuscation, ensemble, cold-start bùng hàng, triage Bayes, AHP) | **chờ chạy với API key** (nb 05, docs/04) |
 
 ## 4. Hạn chế
 * Chi phí trong `CostModel`/`COSTS` là giả định; bùng hàng/chargeback dùng dữ liệu mô phỏng.
@@ -74,9 +75,10 @@
 * Chưa có kết quả LLM/guard model/transformer (cần GPU).
 
 ## 5. Lộ trình tiếp theo
-1. **Chạy notebook 03 trên Colab** (Qwen2.5/Qwen3, Phi-4-mini, Gemma-3, Llama-3.2, Llama Guard 3, Qwen3Guard, ShieldGemma) rồi chạy lại notebook 04 để đưa LLM vào MCDM.
-2. **Dữ liệu nội bộ:** gán nhãn khoảng 2–5k tin nhắn chat CS (toxic/abusive/threat/spam-scam) và lịch sử đơn bùng/chargeback; chạy lại toàn bộ bằng `load_internal_csv` và `load_internal_orders`.
-3. **Định lượng chi phí** với CS lead, finance và legal (AHP/BWM để ra tỉ lệ chi phí), rồi cập nhật `CostModel`.
-4. Fine-tune transformer nhỏ (DistilRoBERTa) hoặc LoRA cho LLM trên dữ liệu nội bộ; active learning với LLM làm bộ gán nhãn sơ bộ.
-5. Uplift modeling cho can thiệp bùng hàng (gọi xác minh hay yêu cầu cọc); chính sách robust theo bất định chi phí (minimax regret).
-6. Hiện thực pipeline hoá đơn giả (docs/03) và cắm `p_doc_forged` vào triage.
+1. **Chạy notebook 05 (Jev)** với `TYPESAFE_API_KEY` (khoảng 8 nghìn lần gọi, dưới 0.2 USD theo giá công bố) và commit `results/jev/cache.jsonl` để tái lập miễn phí.
+2. **Chạy notebook 03 trên Colab** (Qwen2.5/Qwen3, Phi-4-mini, Gemma-3, Llama-3.2, Llama Guard 3, Qwen3Guard, ShieldGemma) rồi chạy lại notebook 04 để đưa LLM vào MCDM.
+3. **Dữ liệu nội bộ:** gán nhãn khoảng 2–5k tin nhắn chat CS (toxic/abusive/threat/spam-scam) và lịch sử đơn bùng/chargeback; chạy lại toàn bộ bằng `load_internal_csv` và `load_internal_orders`.
+4. **Định lượng chi phí** với CS lead, finance và legal (AHP/BWM để ra tỉ lệ chi phí), rồi cập nhật `CostModel`.
+5. Fine-tune transformer nhỏ (DistilRoBERTa) hoặc LoRA cho LLM trên dữ liệu nội bộ; active learning với LLM làm bộ gán nhãn sơ bộ.
+6. Uplift modeling cho can thiệp bùng hàng (gọi xác minh hay yêu cầu cọc); chính sách robust theo bất định chi phí (minimax regret).
+7. Hiện thực pipeline hoá đơn giả (docs/03) và cắm `p_doc_forged` vào triage.
