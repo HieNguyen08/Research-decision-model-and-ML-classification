@@ -193,6 +193,9 @@ def build_prompt(ds: Dataset, row: pd.Series, shots: list[tuple[pd.Series, int]]
 
 
 def _softmax(z):
+    # float64: log-prob trả về ở float32, softmax ở float32 bão hoà về đúng 1.0 khi chênh lệch > ~17 nat
+    # -> nhiều điểm hoà nhau ở đỉnh, làm sai PR-AUC/ROC-AUC của mô hình rất tự tin.
+    z = np.asarray(z, dtype=np.float64)
     z = z - z.max(1, keepdims=True)
     e = np.exp(z)
     return e / e.sum(1, keepdims=True)
@@ -514,9 +517,12 @@ def evaluate_llm_moderation(scorer: HFScorer, task, shots=(0, 8), n_test=300, se
             var["calibrated"] = lp - cf
         for v, L in var.items():
             s = _softmax(L)[:, 1]
+            # xếp hạng theo log-odds (Yes - No): không bao giờ bão hoà; ngưỡng p = 0.5 tương ứng log-odds = 0
+            logit = np.asarray(L, dtype=np.float64) @ np.array([-1.0, 1.0])
             rows.append({"model": scorer.name, "kind": "LLM", "task": task.name, "shots": k, "variant": v,
-                         **metrics(y, s, 0.5), "sec_per_msg": dt / len(idx)})
+                         **metrics(y, logit, 0.0), "sec_per_msg": dt / len(idx)})
             scores[f"{k}|{v}"] = s
+            scores[f"{k}|{v}|logit"] = logit
     return pd.DataFrame(rows), scores
 
 
@@ -581,10 +587,9 @@ def guard_scores(scorer: HFScorer, guard_key: str, texts, category: str, max_new
         score = np.nan
         for step, tok_id in enumerate(gen.tolist()):
             if tok_id in pos_ids | neg_ids:
-                p = torch.softmax(g.scores[step][0].float(), -1)
-                pp = p[list(pos_ids)].sum().item()
-                pn = p[list(neg_ids)].sum().item()
-                score = pp / max(pp + pn, 1e-12)
+                lp = torch.log_softmax(g.scores[step][0].double(), -1)  # log-space: không bão hoà về 0/1
+                margin = (torch.logsumexp(lp[list(pos_ids)], 0) - torch.logsumexp(lp[list(neg_ids)], 0)).item()
+                score = 1.0 / (1.0 + np.exp(-margin))
                 break
         txt = scorer.tok.decode(gen, skip_special_tokens=True)
         if np.isnan(score):  # không tìm thấy token phán quyết -> dùng parse văn bản
