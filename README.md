@@ -1,5 +1,7 @@
 # Mô hình ra quyết định & phân loại ML/LLM cho Trust & Safety trong CS e-commerce
 
+> **Kết quả chính:** xem [docs/02_bao_cao_ket_qua.md](docs/02_bao_cao_ket_qua.md).
+
 Nghiên cứu tổng hợp nhằm **phát hiện** và **ra quyết định xử lý** các tình huống rủi ro mà đội Customer Service gặp hằng ngày:
 
 | Bài toán | Ví dụ | Notebook |
@@ -38,16 +40,19 @@ tests/              kiểm thử (MCDM đối chiếu pymcdm; dry-run LLM; chín
 
 ## Chạy trên Google Colab (máy yếu vẫn dùng được)
 
-Mỗi notebook có nút **Open in Colab** ở đầu. Repo đang để **private** nên cần cấu hình một lần:
+Mỗi notebook có nút **Open in Colab** ở đầu, trỏ tới nhánh `main` (hoạt động sau khi merge các PR).
+Repo đã **public** nên Colab mở và clone được ngay, không cần token.
 
-1. **GitHub token**: GitHub → Settings → Developer settings → *Fine-grained tokens* → Generate.
-   Chọn *Only select repositories* (repo này) và quyền **Contents: Read and write**.
-2. **Hugging Face token** (cho notebook 03): huggingface.co → Settings → Access Tokens → *Read*.
+1. *(Notebook 03, LLM)*: **Hugging Face token**: huggingface.co → Settings → Access Tokens → *Read*.
    Vào trang các mô hình gated (`meta-llama/Llama-Guard-3-1B`, `meta-llama/Llama-3.2-3B-Instruct`, `google/gemma-3-1b-it`, `google/shieldgemma-2b`) và bấm *Agree / Request access*.
-3. Trong Colab: biểu tượng **🔑 Secrets** ở thanh trái → thêm `GH_TOKEN` và `HF_TOKEN` → bật *Notebook access*.
-4. Lần đầu mở notebook từ repo private: Colab → *File → Open notebook → GitHub* → tick *Include private repos* → cấp quyền.
-5. Notebook 03: *Runtime → Change runtime type → T4 GPU*.
-6. Ô đầu tiên của mỗi notebook tự clone repo, cài thư viện và thêm `src/` vào path. Ô cuối có `PUSH_RESULTS = True` để **commit kết quả ngược lên GitHub** (điền tên/email git của bạn).
+2. *(Tuỳ chọn, để đẩy kết quả từ Colab lên GitHub)*: **GitHub token**: Settings → Developer settings → *Fine-grained tokens*, chọn repo này, quyền **Contents: Read and write**.
+3. Trong Colab: biểu tượng **🔑 Secrets** ở thanh trái → thêm `HF_TOKEN` (và `GH_TOKEN` nếu cần) → bật *Notebook access*.
+4. Notebook 03: *Runtime → Change runtime type → T4 GPU*.
+5. Ô đầu tiên tự clone repo, cài thư viện và thêm `src/` vào path. Ô cuối có `PUSH_RESULTS = True` để commit kết quả lên nhánh **`colab-results`** (sau đó mở PR vào `main`).
+
+> Trước khi các PR được merge, mở notebook theo nhánh của PR, ví dụ:
+> `https://colab.research.google.com/github/HieNguyen08/Research-decision-model-and-ML-classification/blob/research/docs-report/notebooks/03_llm_moderation_colab.ipynb`
+> và sửa `BRANCH = "research/docs-report"` trong ô đầu tiên.
 
 ## Chạy local
 
@@ -69,5 +74,6 @@ orders = F.load_internal_orders("orders.csv", label_col="refused_delivery", amou
 Mọi hàm đánh giá, MCDM và chính sách quyết định đều nhận các đối tượng này mà không cần sửa code.
 
 ## Tài liệu
+* [docs/02_bao_cao_ket_qua.md](docs/02_bao_cao_ket_qua.md): **báo cáo kết quả tổng hợp** (bắt đầu đọc từ đây)
 * [docs/01_tong_quan_tai_lieu.md](docs/01_tong_quan_tai_lieu.md): lý thuyết mô hình ra quyết định, MCDM, cây quyết định, kiểm duyệt nội dung, LLM, gian lận, hoá đơn giả, khoảng trống nghiên cứu
 * [docs/03_pipeline_hoa_don_gia.md](docs/03_pipeline_hoa_don_gia.md): thiết kế pipeline phát hiện hoá đơn/bằng chứng giả do AI tạo
