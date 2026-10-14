@@ -105,3 +105,21 @@ def test_guard_scoring_runs(scorer):
     res, sc = llm.evaluate_guard(scorer, "qwen3guard-0.6b", task, n_test=6)
     s = sc["0|raw"]
     assert s.shape == (6,) and np.all((s >= 0) & (s <= 1))
+
+
+def test_pick_dtype_per_gpu():
+    import types
+    from drm.llm import pick_dtype
+
+    def fake(cap, cuda=True):
+        return types.SimpleNamespace(
+            float32="fp32", float16="fp16", bfloat16="bf16",
+            cuda=types.SimpleNamespace(is_available=lambda: cuda, get_device_capability=lambda: cap,
+                                       is_bf16_supported=lambda: True))  # PyTorch mới: True cả trên T4 (giả lập)
+
+    t4, a100 = fake((7, 5)), fake((8, 0))
+    assert pick_dtype("Qwen/Qwen2.5-1.5B-Instruct", t4) == "fp16"
+    assert pick_dtype("google/shieldgemma-2b", t4) == "fp32"
+    assert pick_dtype("google/gemma-3-1b-it", a100) == "bf16"
+    assert pick_dtype("Qwen/Qwen3-4B", a100) == "bf16"
+    assert pick_dtype("x", fake((7, 5), cuda=False)) == "fp32"
