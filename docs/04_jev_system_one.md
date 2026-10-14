@@ -98,6 +98,23 @@ Cộng đồng nhanh chóng tái hiện "hình dạng" System One (state + N l�
 
 → Trong notebook 05, **`LocalJevAdapter`** (Qwen2.5-1.5B đọc log-likelihood nhãn, *không* có RLCD) là baseline để tách riêng giá trị của huấn luyện RLCD.
 
+## 4b. Khi không có credit Jev: WaterSheep (mở, miễn phí)
+
+API của Jev **tính phí theo token** và yêu cầu nạp credit trước. Vercel AI Gateway và OpenRouter cũng tính phí; không tìm thấy gói miễn phí chính thức nào.
+Repo vì vậy dùng **WaterSheep** làm backend mặc định cho notebook 05:
+
+| | WaterSheep |
+|---|---|
+| Kiến trúc | encoder **ModernBERT-base** + đầu quyết định, hiệu chỉnh xác suất bằng temperature theo loại câu hỏi |
+| Giao diện | `noul` / `choice` / `score` (thêm `multi`), cùng định dạng request/response với Jev; có server `POST /v1/systemone` dùng được với SDK của TypeSafe |
+| Mã nguồn | [SamratDuttaOfficial/WaterSheep](https://github.com/SamratDuttaOfficial/WaterSheep) (Apache-2.0); trọng số `samratduttaofficial/WaterSheep` trên Hugging Face |
+| Kết quả tác giả tự báo cáo | accuracy 77.8% (ECE 0.026) trong phân phối huấn luyện; 61.2% (ECE 0.043) trên dataset chưa thấy; HateCheck 75.1% (ECE 0.139) |
+| Kiểm chứng trong repo | mọi bộ câu hỏi (kiểm duyệt, bùng hàng/chargeback, AHP 9 bậc) đã chạy qua **mã kiểm tra hợp lệ thật** của WaterSheep, chỉ thay phần mô hình (không tải được trọng số từ môi trường nghiên cứu) |
+
+Cách dùng: `jev.WaterSheepAdapter()` trong Python, hoặc chạy server `watersheep --model samratduttaofficial/WaterSheep --serve`
+rồi dùng `jev.JevClient(api_key="local", base_url="http://127.0.0.1:8766")`.
+**Lưu ý:** WaterSheep là bản tái hiện độc lập, *không* phải Jev. Kết luận rút ra từ nó là về **lớp mô hình "System One" mở**. Khi có credit, notebook chạy cả hai để so sánh trực tiếp.
+
 ## 5. Rủi ro khi đưa vào CS e-commerce
 
 1. **Quyền riêng tư:** tin nhắn và đơn hàng của khách bị gửi sang API bên thứ ba. Cần thoả thuận xử lý dữ liệu (DPA), che PII (SĐT, địa chỉ, số thẻ) trước khi gửi. Nếu không được phép thì cân nhắc bản tái hiện mở chạy nội bộ.
@@ -110,6 +127,7 @@ Cộng đồng nhanh chóng tái hiện "hình dạng" System One (state + N l�
 
 | # | Giả thuyết | Đo bằng |
 |---|---|---|
+| H0 | Một decision model **mở, miễn phí** (WaterSheep) đủ dùng cho tầng triage, so với TF-IDF đã huấn luyện | E1, E6 |
 | H1 | Jev zero-shot đạt ≥ 90% PR-AUC của TF-IDF *đã huấn luyện* với toxic/offensive/spam, nhưng thấp hơn rõ với hate (Davidson) | E1 |
 | H2 | Jev có ECE thấp hơn LLM mở không RLCD; vài chục nhãn đủ để hiệu chỉnh lại | E2 |
 | H3 | Obfuscation làm Jev mất ít PR-AUC hơn TF-IDF | E1/E3 |

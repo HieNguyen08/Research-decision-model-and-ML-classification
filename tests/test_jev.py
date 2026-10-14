@@ -122,3 +122,31 @@ def test_local_adapter_same_format():
     assert 0 <= r["answers"]["toxic"]["noul"] <= 1
     assert abs(sum(r["answers"]["action"]["probabilities"].values()) - 1) < 1e-6
     assert 0 <= r["answers"]["severity"]["score"] <= 3
+
+
+class FakeWaterSheep:
+    """Giả lập watersheep.WaterSheep.ask (cùng định dạng {model, answers, usage})."""
+
+    def ask(self, request):
+        answers = FakeTransport()("u", {}, {"state": request["state"], "questions": request["questions"]}, 1)[1]["answers"]
+        return {"model": "WaterSheep", "answers": answers, "usage": {"input_tokens": 12, "output_tokens": 0}}
+
+
+def test_watersheep_adapter_same_interface():
+    from drm.text import TextTask
+    X = pd.Series(["you idiot", "thanks a lot", "free prize now", "where is my order"] * 10)
+    y = np.array([1, 0, 1, 0] * 10)
+    task = TextTask("sms_spam", X, y, X, y, "spam", "Is this spam?", "toy")
+    ws = jev.WaterSheepAdapter(ws=FakeWaterSheep())
+    res, sc = jev.evaluate_moderation(ws, task, n_test=20)
+    assert (res.roc_auc == 1.0).all() and ws.usage["input_tokens"] == 12 * 40
+    assert ws.cost_report()["est_cost_usd"] == 0.0
+
+
+def test_watersheep_adapter_surfaces_question_errors():
+    class Bad:
+        def ask(self, request):
+            return {"model": "WaterSheep", "answers": {"x": {"type": "score", "error": "score needs 2-10 levels"}},
+                    "usage": {}}
+    with pytest.raises(jev.JevError):
+        jev.WaterSheepAdapter(ws=Bad()).ask("hi", {"x": jev.score("?", list("abcdefghijkl"))})

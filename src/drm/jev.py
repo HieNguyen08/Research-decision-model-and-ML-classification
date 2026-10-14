@@ -16,6 +16,8 @@ Module gồm:
                        ``base_url`` đổi được -> dùng với các server mở tương thích `/v1/systemone`.
 * ``LocalJevAdapter`` – cùng giao diện nhưng chạy bằng LLM mở (``llm.HFScorer``) qua log-likelihood của nhãn
                        -> baseline "Jev-like không có RLCD", và để chạy thử không cần API key.
+* ``WaterSheepAdapter`` – decision model mở, miễn phí (ModernBERT-base, Apache-2.0), cùng định dạng câu hỏi/trả lời
+                       -> thay thế Jev khi không có credit.
 * Bộ câu hỏi cho kiểm duyệt tin nhắn, bùng hàng/chargeback, AHP; hàm đánh giá & ECE.
 """
 from __future__ import annotations
@@ -243,6 +245,56 @@ class LocalJevAdapter:
         lat = np.array(self.usage["latency_s"]) if self.usage["latency_s"] else np.array([np.nan])
         return {"calls": self.usage["calls"], "cache_hits": 0, "input_tokens": np.nan, "est_cost_usd": 0.0,
                 "latency_p50_ms": float(np.nanmedian(lat) * 1000), "latency_p95_ms": float(np.nanpercentile(lat, 95) * 1000)}
+
+
+# --------------------------------------------------------------------------- WaterSheep (mở, miễn phí)
+
+WATERSHEEP_REPO = "samratduttaofficial/WaterSheep"
+WATERSHEEP_PIP = "git+https://github.com/SamratDuttaOfficial/WaterSheep"
+
+
+class WaterSheepAdapter:
+    """WaterSheep (Apache-2.0): decision model mở trên ModernBERT-base, hiệu chỉnh xác suất bằng temperature.
+
+    Nhận cùng request {state, questions} và trả cùng định dạng answers như Jev (noul / choice / score),
+    nên mọi hàm đánh giá trong module dùng được ngay. Chạy tốt trên CPU, nhanh hơn trên GPU.
+    Cài: ``pip install git+https://github.com/SamratDuttaOfficial/WaterSheep`` (yêu cầu transformers>=5).
+    Có thể thay bằng server tương thích: ``watersheep --model ... --serve`` rồi
+    ``JevClient(api_key="local", base_url="http://127.0.0.1:8766")``.
+    """
+
+    def __init__(self, model: str = WATERSHEEP_REPO, device: str | None = None, ws=None, name: str = "WaterSheep"):
+        if ws is None:
+            from watersheep import WaterSheep
+            ws = WaterSheep.load(model, device=device)
+        self.ws = ws
+        self.name = name
+        self.usage = {"calls": 0, "cache_hits": 0, "input_tokens": 0, "output_tokens": 0, "latency_s": []}
+
+    def ask(self, state, questions: dict) -> dict:
+        t0 = time.perf_counter()
+        resp = self.ws.ask({"state": state, "questions": questions})
+        errors = {k: a["error"] for k, a in resp.get("answers", {}).items() if isinstance(a, dict) and "error" in a}
+        if errors:
+            raise JevError(f"WaterSheep từ chối câu hỏi: {errors}")
+        self.usage["calls"] += 1
+        self.usage["input_tokens"] += (resp.get("usage") or {}).get("input_tokens") or 0
+        self.usage["latency_s"].append(time.perf_counter() - t0)
+        return resp
+
+    def ask_many(self, states, questions, progress=True):
+        out = []
+        for i, s in enumerate(states):
+            out.append(self.ask(s, questions))
+            if progress and (i + 1) % 200 == 0:
+                print(f"  {self.name}: {i + 1}/{len(states)}", flush=True)
+        return out
+
+    def cost_report(self):
+        lat = np.array(self.usage["latency_s"]) if self.usage["latency_s"] else np.array([np.nan])
+        return {"calls": self.usage["calls"], "cache_hits": 0, "input_tokens": self.usage["input_tokens"],
+                "est_cost_usd": 0.0, "latency_p50_ms": float(np.nanmedian(lat) * 1000),
+                "latency_p95_ms": float(np.nanpercentile(lat, 95) * 1000)}
 
 
 # --------------------------------------------------------------------------- answer readers
