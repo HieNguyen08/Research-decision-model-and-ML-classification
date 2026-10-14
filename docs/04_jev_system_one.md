@@ -123,18 +123,26 @@ rồi dùng `jev.JevClient(api_key="local", base_url="http://127.0.0.1:8766")`.
 4. **Tấn công đối kháng**: kết hợp với chuẩn hoá ngược (nb 01) và mô hình huấn luyện riêng.
 5. **Phụ thuộc nhà cung cấp và giá/độ trễ do nhà phát triển công bố**: luôn đo lại (nb 05 ghi lại token và độ trễ thực tế); có phương án dự phòng qua server tương thích.
 
-## 6. Giả thuyết kiểm định trong notebook 05
+## 6. Giả thuyết kiểm định trong notebook 05 và kết quả
 
-| # | Giả thuyết | Đo bằng |
-|---|---|---|
-| H0 | Một decision model **mở, miễn phí** (WaterSheep) đủ dùng cho tầng triage, so với TF-IDF đã huấn luyện | E1, E6 |
-| H1 | Jev zero-shot đạt ≥ 90% PR-AUC của TF-IDF *đã huấn luyện* với toxic/offensive/spam, nhưng thấp hơn rõ với hate (Davidson) | E1 |
-| H2 | Jev có ECE thấp hơn LLM mở không RLCD; vài chục nhãn đủ để hiệu chỉnh lại | E2 |
-| H3 | Obfuscation làm Jev mất ít PR-AUC hơn TF-IDF | E1/E3 |
-| H4 | Kết hợp Jev + TF-IDF tốt hơn từng mô hình | E4 |
-| H5 | Prior Jev giúp LogReg khi chỉ có k ≤ 64 nhãn (cold-start bùng hàng) | E5 |
-| H6 | Bayes·Jev có chi phí gần Bayes·TF-IDF; `action` trực tiếp của Jev kém hơn Bayes vì không biết chi phí | E6 |
-| H7 | Ma trận AHP do Jev sinh nhất quán (CR < 0.1) | E7 |
+Đã chạy trên Colab với **WaterSheep** (bản mở cùng giao thức) và baseline **Jev-like Qwen2.5-1.5B**. **Jev thật chưa chạy** vì cần credit.
+Kết quả dưới đây là của WaterSheep, chưa phải của Jev. Số liệu: `results/jev/`; phân tích chi tiết: kết luận của notebook 05 và docs/02 mục 2.6.
+
+| # | Giả thuyết | Đo bằng | Kết quả với WaterSheep |
+|---|---|---|---|
+| H0 | Một decision model **mở, miễn phí** (WaterSheep) đủ dùng cho tầng triage, so với TF-IDF đã huấn luyện | E1, E6 | **Chưa đủ nếu đứng một mình.** Dùng được cho tin nhắn (sau khi hiệu chỉnh), không dùng được cho đơn hàng; chi phí triage 1746 so với 1090 |
+| H1 | Jev zero-shot đạt ≥ 90% PR-AUC của TF-IDF *đã huấn luyện* với toxic/offensive/spam, nhưng thấp hơn rõ với hate (Davidson) | E1 | **Đúng:** Jigsaw 98%, offensive 118%, spam 102%; Davidson 23% |
+| H2 | Jev có ECE thấp hơn LLM mở không RLCD; vài chục nhãn đủ để hiệu chỉnh lại | E2 | **Vế 1 sai** (ECE 0.269 so với 0.230 của Jev-like Qwen; quá tự tin ở vùng 0.8–0.97). **Vế 2 đúng** (50 nhãn/task: ECE 0.053) |
+| H3 | Obfuscation làm Jev mất ít PR-AUC hơn TF-IDF | E1/E3 | **Đúng:** −0.9%, so với −4.5% |
+| H4 | Kết hợp Jev + TF-IDF tốt hơn từng mô hình | E4 | **Đúng, mức vừa:** 0.773, so với 0.756 / 0.688 (w = 0.25) |
+| H5 | Prior Jev giúp LogReg khi chỉ có k ≤ 64 nhãn (cold-start bùng hàng) | E5 | **Sai:** WaterSheep trên JSON đơn hàng có ROC-AUC < 0.5; prior thêm ≤ 0.004. Cần thử prior của Jev-like Qwen (ROC-AUC 0.71–0.73) |
+| H6 | Bayes·Jev có chi phí gần Bayes·TF-IDF; `action` trực tiếp của Jev kém hơn Bayes vì không biết chi phí | E6 | **Vế 1 sai** (+60%, do phần đơn hàng và xác suất chưa hiệu chỉnh). **Vế 2 đúng** (`action` 1891 là kém nhất) |
+| H7 | Ma trận AHP do Jev sinh nhất quán (CR < 0.1) | E7 | **Đúng về hình thức** (CR ≈ 0.01), nhưng trọng số gần đều và gần như không đổi giữa hai kịch bản → nhất quán vì "thờ ơ", không phải vì phán đoán tốt |
+
+**Ý nghĩa cho họ Jev:**
+* Giao thức System One (câu hỏi Noul/Choice/Score → xác suất) dùng tốt cho **văn bản ngắn**: một mô hình 150M tham số đã ngang các LLM 3–4B zero-shot.
+* Lời hứa "xác suất đã hiệu chỉnh" **không tự động đúng** với bản tái hiện mở. Cần đo lại ECE trên Jev thật trước khi đưa xác suất vào chính sách Bayes.
+* Với **dữ liệu dạng bảng** (đơn hàng), cần thận trọng: phải kiểm tra chiều của tín hiệu trên một mẫu có nhãn trước khi dùng.
 
 ## 7. Hướng cải tiến đề xuất
 
