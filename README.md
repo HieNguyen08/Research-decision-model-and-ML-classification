@@ -12,7 +12,7 @@ Nghiên cứu tổng hợp nhằm **phát hiện** và **ra quyết định xử
 | **Bùng hàng COD** | đặt rồi không nhận, "boom hàng" | 02 |
 | Hoá đơn / bằng chứng giả do AI | biên lai chuyển khoản giả, ảnh hàng lỗi do AI tạo | docs/03 |
 | **Ra quyết định** | chọn mô hình nào (MCDM), xử lý ca nào trước/chặn/chuyển người (triage) | 04 |
-| **Decision model zero-shot (Jev)** | không cần dữ liệu gán nhãn: xác suất đã hiệu chỉnh + hành động đề xuất | 05 |
+| **Decision model zero-shot (WaterSheep mở / Jev)** | không cần dữ liệu gán nhãn: xác suất đã hiệu chỉnh + hành động đề xuất | 05 |
 
 Ngôn ngữ dữ liệu: **tiếng Anh**. Mã nguồn chạy được trên CPU; phần LLM chạy trên **Google Colab GPU**.
 
@@ -27,12 +27,12 @@ src/drm/            thư viện dùng chung
   mcdm.py           AHP, Entropy, CRITIC, SAW, TOPSIS, VIKOR, PROMETHEE II, EDAS, MOORA, SMAA, rank reversal
   decision.py       mô hình ra quyết định triage: luật, Bayes chi phí kỳ vọng + năng lực review, scorecard MCDM
   llm.py            LLM/guard model/classifier chuyên dụng: chấm điểm, few-shot, calibration, LLM-as-AHP-expert
-  jev.py            Jev (System One decision model): client /v1/systemone có cache, adapter Jev-like mở, câu hỏi kiểm duyệt/đơn hàng/AHP
+  jev.py            decision model "System One": client Jev /v1/systemone (cache), adapter WaterSheep (mở) và Jev-like LLM, câu hỏi kiểm duyệt/đơn hàng/AHP
 notebooks/
   01_text_moderation_benchmark.ipynb      CPU
   02_fraud_chargeback_cod.ipynb           CPU
   03_llm_moderation_colab.ipynb           Colab GPU
-  05_jev_zero_shot_decisions.ipynb        Jev (TypeSafe AI) zero-shot – cần TYPESAFE_API_KEY
+  05_jev_zero_shot_decisions.ipynb        decision model zero-shot: WaterSheep (mở, miễn phí, mặc định) + Jev (nếu có credit)
   04_decision_models_cs_triage.ipynb      CPU
   appendix/A1, A2                         benchmark & MCDM trên 14 dataset UCI (phương pháp luận)
 scripts/            chạy benchmark từ dòng lệnh
@@ -50,7 +50,7 @@ Repo đã **public** nên Colab mở và clone được ngay, không cần token
    Vào trang các mô hình gated (`meta-llama/Llama-Guard-3-1B`, `meta-llama/Llama-3.2-3B-Instruct`, `google/gemma-3-1b-it`, `google/shieldgemma-2b`) và bấm *Agree / Request access*.
 2. *(Tuỳ chọn, để đẩy kết quả từ Colab lên GitHub)*: **GitHub token**: Settings → Developer settings → *Fine-grained tokens*, chọn repo này, quyền **Contents: Read and write**.
 3. Trong Colab: biểu tượng **🔑 Secrets** ở thanh trái → thêm `HF_TOKEN` (và `GH_TOKEN` nếu cần) → bật *Notebook access*.
-   Notebook 05 (Jev): thêm `TYPESAFE_API_KEY` (đăng ký tại TypeSafe AI). Không có key, notebook chạy chế độ thử (DRY_RUN).
+   Notebook 05: mặc định chạy **WaterSheep** (mã nguồn mở, miễn phí, không cần key; nên bật GPU). Có credit Jev thì thêm `TYPESAFE_API_KEY` để so sánh thêm Jev.
 4. Notebook 03: *Runtime → Change runtime type → T4 GPU*.
 5. Ô đầu tiên tự clone repo, cài thư viện và thêm `src/` vào path. Ô cuối có `PUSH_RESULTS = True` để commit kết quả lên nhánh **`colab-results`** (sau đó mở PR vào `main`).
 

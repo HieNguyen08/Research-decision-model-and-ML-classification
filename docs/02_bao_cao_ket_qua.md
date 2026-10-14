@@ -75,7 +75,7 @@
 * Chưa có kết quả LLM/guard model/transformer (cần GPU).
 
 ## 5. Lộ trình tiếp theo
-1. **Chạy notebook 05 (Jev)** với `TYPESAFE_API_KEY` (khoảng 8 nghìn lần gọi, dưới 0.2 USD theo giá công bố) và commit `results/jev/cache.jsonl` để tái lập miễn phí.
+1. **Chạy notebook 05** trên Colab GPU: mặc định dùng **WaterSheep** (mở, miễn phí). Nếu có credit Jev thì thêm `TYPESAFE_API_KEY` (khoảng 8 nghìn lần gọi, dưới 0.2 USD theo giá công bố) để so sánh trực tiếp.
 2. **Chạy notebook 03 trên Colab** (Qwen2.5/Qwen3, Phi-4-mini, Gemma-3, Llama-3.2, Llama Guard 3, Qwen3Guard, ShieldGemma) rồi chạy lại notebook 04 để đưa LLM vào MCDM.
 3. **Dữ liệu nội bộ:** gán nhãn khoảng 2–5k tin nhắn chat CS (toxic/abusive/threat/spam-scam) và lịch sử đơn bùng/chargeback; chạy lại toàn bộ bằng `load_internal_csv` và `load_internal_orders`.
 4. **Định lượng chi phí** với CS lead, finance và legal (AHP/BWM để ra tỉ lệ chi phí), rồi cập nhật `CostModel`.
