@@ -49,6 +49,22 @@ def verbalizer(c: str) -> str:
     return c[:1].upper() + c[1:]
 
 
+def pick_dtype(model_id: str, torch):
+    """Chọn kiểu số cho GPU hiện tại.
+
+    * Ampere+ (compute capability ≥ 8: L4, A100...) -> bf16 gốc.
+    * GPU cũ (T4, V100) không có bf16 gốc; `is_bf16_supported()` của PyTorch mới vẫn trả True vì tính cả giả lập
+      (chậm) nên không dùng. Mặc định fp16, riêng họ **Gemma** dễ tràn số ra NaN ở fp16 -> fp32
+      (mô hình ≤ 3B vẫn vừa 15 GB VRAM của T4).
+    * Không có GPU -> fp32.
+    """
+    if not torch.cuda.is_available():
+        return torch.float32
+    if torch.cuda.get_device_capability()[0] >= 8:
+        return torch.bfloat16
+    return torch.float32 if "gemma" in str(model_id).lower() else torch.float16
+
+
 # --------------------------------------------------------------------------- model wrapper
 
 
@@ -64,11 +80,7 @@ class HFScorer:
             if model_id in MODEL_ZOO:
                 model_id = MODEL_ZOO[model_id][0]
             tokenizer = AutoTokenizer.from_pretrained(model_id)
-            if torch.cuda.is_available():  # T4 không hỗ trợ bf16 gốc -> fp16
-                dt = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-            else:
-                dt = torch.float32
-            kw = {"dtype": dt, "device_map": "auto"}
+            kw = {"dtype": pick_dtype(model_id, torch), "device_map": "auto"}
             if load_in_4bit:
                 from transformers import BitsAndBytesConfig
                 kw["quantization_config"] = BitsAndBytesConfig(
