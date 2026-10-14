@@ -432,3 +432,189 @@ class RunConfig:
     shots: tuple = (0, 4, 8)
     n_test: int = 200
     seed: int = 0
+
+
+# =========================================================================== (3) text moderation for CS
+
+MODERATION_ZOO = {
+    # guard models chuyên dụng (đọc tin nhắn, trả lời safe/unsafe)
+    "llama-guard-3-1b": "meta-llama/Llama-Guard-3-1B",       # cần chấp nhận license Meta + HF_TOKEN
+    "qwen3guard-0.6b": "Qwen/Qwen3Guard-Gen-0.6B",
+    "qwen3guard-4b": "Qwen/Qwen3Guard-Gen-4B",
+    "shieldgemma-2b": "google/shieldgemma-2b",               # cần chấp nhận license Gemma + HF_TOKEN
+}
+
+# classifier nhỏ đã fine-tune sẵn (BERT/RoBERTa) -> (nhãn dương, các task phù hợp, ghi chú rò rỉ dữ liệu)
+SPECIALIZED = {
+    "unitary/toxic-bert": (("toxic",), ("jigsaw_toxic", "hatexplain_toxic", "tweeteval_offensive"),
+                           "huấn luyện trên Jigsaw -> kết quả trên jigsaw_toxic bị RÒ RỈ (test nằm trong train của nó)"),
+    "cardiffnlp/twitter-roberta-base-offensive": (("offensive",), ("tweeteval_offensive", "hatexplain_toxic", "jigsaw_toxic"),
+                                                  "huấn luyện trên TweetEval-offensive train (test độc lập)"),
+    "cardiffnlp/twitter-roberta-base-hate-latest": (("HATE", "hate"), ("tweeteval_hate", "davidson_hate", "hatexplain_toxic"),
+                                                    "huấn luyện trên tập hợp 13 dataset hate (có thể gồm HatEval/Davidson -> nghi rò rỉ)"),
+    "mrm8488/bert-tiny-finetuned-sms-spam-detection": (("LABEL_1", "spam"), ("sms_spam",),
+                                                       "huấn luyện trên SMS Spam Collection -> nghi RÒ RỈ"),
+}
+
+
+def build_moderation_prompt(task, text: str, shots=(), max_chars=600) -> str:
+    s = ["You are a content moderator for the customer-service team of an e-commerce platform.",
+         f"Question: {task.question}", "Answer with exactly one word: Yes or No.", ""]
+    for i, (t, y) in enumerate(shots, 1):
+        s += [f'Example {i}: "{t[:max_chars]}"', f"Answer: {'Yes' if y else 'No'}", ""]
+    s += [f'Message: "{text[:max_chars]}"', f"{task.question} Answer Yes or No."]
+    return "\n".join(s)
+
+
+def sample_text_shots(task, k, seed=0):
+    if k == 0:
+        return []
+    rng = np.random.default_rng(seed)
+    pos = rng.choice(np.where(task.y_train == 1)[0], k // 2, replace=False)
+    neg = rng.choice(np.where(task.y_train == 0)[0], k - k // 2, replace=False)
+    idx = rng.permutation(np.concatenate([pos, neg]))
+    return [(task.X_train.iloc[i], int(task.y_train[i])) for i in idx]
+
+
+def text_test_subset(task, n_test=300, seed=0):
+    from sklearn.model_selection import train_test_split
+    idx = np.arange(len(task.y_test))
+    if len(idx) > n_test:
+        idx, _ = train_test_split(idx, train_size=n_test, stratify=task.y_test, random_state=seed)
+    return np.sort(idx)
+
+
+def evaluate_llm_moderation(scorer: HFScorer, task, shots=(0, 8), n_test=300, seed=0, calibrate=True):
+    """LLM tổng quát làm moderator: P(Yes) qua log-likelihood nhãn. Trả về (metric df, dict điểm)."""
+    from .text import metrics
+    idx = text_test_subset(task, n_test, seed)
+    y = task.y_test[idx]
+    rows, scores = [], {"idx": idx}
+    for k in shots:
+        sh = sample_text_shots(task, k, seed)
+        prompts = [scorer.chat(build_moderation_prompt(task, task.X_test.iloc[i], sh)) for i in idx]
+        t0 = time.perf_counter()
+        lp = scorer.label_logprobs(prompts, ["No", "Yes"])
+        dt = time.perf_counter() - t0
+        var = {"raw": lp}
+        if calibrate:
+            cf = scorer.label_logprobs([scorer.chat(build_moderation_prompt(task, "N/A", sh))], ["No", "Yes"])
+            var["calibrated"] = lp - cf
+        for v, L in var.items():
+            s = _softmax(L)[:, 1]
+            rows.append({"model": scorer.name, "kind": "LLM", "task": task.name, "shots": k, "variant": v,
+                         **metrics(y, s, 0.5), "sec_per_msg": dt / len(idx)})
+            scores[f"{k}|{v}"] = s
+    return pd.DataFrame(rows), scores
+
+
+def guard_prompt(guard_key: str, tokenizer, text: str, policy: str) -> str:
+    if guard_key.startswith("shieldgemma"):
+        return ("You are a policy expert trying to help determine whether a user prompt is in violation of the "
+                "defined safety policies.\n\n<start_of_turn>\nHuman Question: " + text +
+                "\n<end_of_turn>\n\nOur safety principle is defined in the below:\n\n* " + policy +
+                "\n\n===\n\nDoes the human question violate the above principle? Your answer must start with "
+                "'Yes' or 'No'. And then walk through step by step to be sure we answer correctly.\n")
+    msgs = [{"role": "user", "content": [{"type": "text", "text": text}]}] if guard_key.startswith("llama-guard") \
+        else [{"role": "user", "content": text}]
+    return tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
+
+
+GUARD_VERDICTS = {  # (từ chỉ vi phạm, từ chỉ an toàn)
+    "llama-guard": (["unsafe"], ["safe"]),
+    "qwen3guard": (["Unsafe", "Controversial"], ["Safe"]),
+    "shieldgemma": (["Yes"], ["No"]),
+}
+
+GUARD_POLICY = {
+    "toxic": '"No Harassment": The prompt shall not contain or seek generation of content that is malicious, '
+             "intimidating, bullying, insulting or abusive content targeting another individual.",
+    "offensive": '"No Harassment": The prompt shall not contain insulting, profane or abusive content targeting others.',
+    "hate": '"No Hate Speech": The prompt shall not contain or seek generation of content that targets identity '
+            "and/or protected attributes (e.g., racial slurs, promotion of discrimination, calls to violence against "
+            "protected groups) or dehumanizing/belittling/vilifying on the bases of race, ethnicity, religion, "
+            "disability, age, nationality, veteran status, sexual orientation, gender, gender identity, caste, "
+            "or any other protected status.",
+    "spam": '"No Spam or Scam": The prompt shall not contain unsolicited advertising, phishing, lottery/prize scams '
+            "or attempts to move the conversation to external payment channels.",
+}
+
+
+def guard_scores(scorer: HFScorer, guard_key: str, texts, category: str, max_new_tokens=12, max_chars=1000):
+    """Điểm vi phạm ∈ [0,1] từ guard model: tại bước sinh ra từ phán quyết, so sánh xác suất token đầu của
+    các từ 'vi phạm' với các từ 'an toàn'. Hoạt động chung cho Llama Guard / Qwen3Guard / ShieldGemma."""
+    torch = scorer.torch
+    fam = next(k for k in GUARD_VERDICTS if guard_key.startswith(k))
+    pos_w, neg_w = GUARD_VERDICTS[fam]
+
+    def first_ids(words):
+        ids = set()
+        for w in words:
+            for v in (w, " " + w, w.lower(), " " + w.lower(), w.capitalize(), " " + w.capitalize()):
+                t = scorer._ids(v)
+                if t:
+                    ids.add(t[0])
+        return ids
+
+    pos_ids, neg_ids = first_ids(pos_w), first_ids(neg_w)
+    pos_ids -= neg_ids  # tránh trùng (vd. "un" vs "unsafe")
+    out, raw = [], []
+    for t in texts:
+        prompt = guard_prompt(guard_key, scorer.tok, str(t)[:max_chars], GUARD_POLICY.get(category, GUARD_POLICY["toxic"]))
+        enc = scorer.tok(prompt, return_tensors="pt", add_special_tokens=False).to(scorer.device)
+        with torch.no_grad():
+            g = scorer.model.generate(**enc, max_new_tokens=max_new_tokens, do_sample=False, output_scores=True,
+                                      return_dict_in_generate=True, pad_token_id=scorer.tok.pad_token_id)
+        gen = g.sequences[0, enc["input_ids"].shape[1]:]
+        score = np.nan
+        for step, tok_id in enumerate(gen.tolist()):
+            if tok_id in pos_ids | neg_ids:
+                p = torch.softmax(g.scores[step][0].float(), -1)
+                pp = p[list(pos_ids)].sum().item()
+                pn = p[list(neg_ids)].sum().item()
+                score = pp / max(pp + pn, 1e-12)
+                break
+        txt = scorer.tok.decode(gen, skip_special_tokens=True)
+        if np.isnan(score):  # không tìm thấy token phán quyết -> dùng parse văn bản
+            score = float(any(w.lower() in txt.lower() for w in pos_w) and not txt.lower().strip().startswith("safe"))
+        out.append(score)
+        raw.append(txt)
+    return np.array(out), raw
+
+
+def evaluate_guard(scorer: HFScorer, guard_key: str, task, n_test=300, seed=0):
+    from .text import metrics
+    idx = text_test_subset(task, n_test, seed)
+    t0 = time.perf_counter()
+    s, raw = guard_scores(scorer, guard_key, task.X_test.iloc[idx].tolist(), task.category)
+    dt = time.perf_counter() - t0
+    y = task.y_test[idx]
+    row = {"model": guard_key, "kind": "guard", "task": task.name, "shots": 0, "variant": "raw",
+           **metrics(y, s, 0.5), "sec_per_msg": dt / len(idx)}
+    return pd.DataFrame([row]), {"idx": idx, "0|raw": s, "raw_text": raw}
+
+
+def evaluate_specialized(model_id: str, task, n_test=300, seed=0, batch_size=32, device=None):
+    """Classifier fine-tune sẵn qua transformers.pipeline (đọc điểm của nhãn dương)."""
+    from transformers import pipeline
+    from .text import metrics
+    pos_labels, _, note = SPECIALIZED[model_id]
+    idx = text_test_subset(task, n_test, seed)
+    clf = pipeline("text-classification", model=model_id, top_k=None, truncation=True, max_length=256,
+                   device=device if device is not None else (0 if _cuda() else -1))
+    t0 = time.perf_counter()
+    preds = clf([str(t) for t in task.X_test.iloc[idx]], batch_size=batch_size)
+    dt = time.perf_counter() - t0
+    s = np.array([max([d["score"] for d in p if d["label"] in pos_labels] or [0.0]) for p in preds])
+    y = task.y_test[idx]
+    row = {"model": model_id.split("/")[-1], "kind": "fine-tuned classifier", "task": task.name, "shots": 0,
+           "variant": "raw", **metrics(y, s, 0.5), "sec_per_msg": dt / len(idx), "note": note}
+    return pd.DataFrame([row]), {"idx": idx, "0|raw": s}
+
+
+def _cuda():
+    try:
+        import torch
+        return torch.cuda.is_available()
+    except ImportError:
+        return False

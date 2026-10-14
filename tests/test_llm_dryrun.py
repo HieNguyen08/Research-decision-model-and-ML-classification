@@ -80,3 +80,28 @@ def test_left_padding_with_very_different_lengths(scorer):
     got = scorer.label_logprobs(prompts, labels)
     ref = np.array([[_manual_logprob(scorer, p, l) for l in labels] for p in prompts])
     np.testing.assert_allclose(got, ref, rtol=1e-4, atol=1e-4)
+
+
+def _toy_text_task():
+    import pandas as pd
+    from drm.text import TextTask
+    rng = np.random.default_rng(0)
+    words = ["refund", "late", "idiot", "great", "scam", "thanks", "order", "awful"]
+    X = pd.Series([" ".join(rng.choice(words, 6)) for _ in range(60)])
+    y = np.array([int(("idiot" in t) or ("scam" in t)) for t in X])
+    return TextTask("toy", X[:40].reset_index(drop=True), y[:40], X[40:].reset_index(drop=True), y[40:],
+                    "toxic", "Is this message toxic?", "toy")
+
+
+def test_llm_moderation_pipeline(scorer):
+    task = _toy_text_task()
+    res, sc = llm.evaluate_llm_moderation(scorer, task, shots=(0, 4), n_test=12)
+    assert len(res) == 4 and res["pr_auc"].between(0, 1).all()
+    assert sc["4|calibrated"].shape == (12,)
+
+
+def test_guard_scoring_runs(scorer):
+    task = _toy_text_task()
+    res, sc = llm.evaluate_guard(scorer, "qwen3guard-0.6b", task, n_test=6)
+    s = sc["0|raw"]
+    assert s.shape == (6,) and np.all((s >= 0) & (s <= 1))
