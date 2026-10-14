@@ -1,0 +1,7 @@
+policy,cost_per_1k_cases,harmful_msgs_to_agents_%,risky_orders_shipped_%,false_restrict_%,review_%,restrict_%
+Luật 0.5/0.9 · TF-IDF+GBM,1205.16,30.71,65.82,1.16,5.0,9.0
+Bayes · TF-IDF+GBM (đã huấn luyện),1089.78,23.22,59.84,1.18,5.0,11.5
+Bayes · WaterSheep (zero-shot),1746.1,0.91,79.92,3.92,5.0,13.34
+Luật 0.5/0.9 · WaterSheep,1640.94,0.91,81.12,3.42,4.12,12.9
+WaterSheep `action` trực tiếp,1890.51,30.53,88.7,3.63,1.64,9.68
+Oracle,0.0,0.0,0.0,0.0,0.0,24.0

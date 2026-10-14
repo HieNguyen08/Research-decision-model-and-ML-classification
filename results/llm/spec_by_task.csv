@@ -1,0 +1,11 @@
+model,model_id,task,pr_auc,leakage
+toxic-bert,unitary/toxic-bert,jigsaw_toxic,0.982,rò rỉ: huấn luyện trên Jigsaw
+toxic-bert,unitary/toxic-bert,hatexplain_toxic,0.717,
+toxic-bert,unitary/toxic-bert,tweeteval_offensive,0.781,
+twitter-roberta-base-offensive,cardiffnlp/twitter-roberta-base-offensive,tweeteval_offensive,0.757,
+twitter-roberta-base-offensive,cardiffnlp/twitter-roberta-base-offensive,hatexplain_toxic,0.702,
+twitter-roberta-base-offensive,cardiffnlp/twitter-roberta-base-offensive,jigsaw_toxic,0.92,
+twitter-roberta-base-hate-latest,cardiffnlp/twitter-roberta-base-hate-latest,tweeteval_hate,0.894,nghi rò rỉ: tập huấn luyện gộp 13 dataset hate
+twitter-roberta-base-hate-latest,cardiffnlp/twitter-roberta-base-hate-latest,davidson_hate,0.299,nghi rò rỉ: tập huấn luyện gộp 13 dataset hate
+twitter-roberta-base-hate-latest,cardiffnlp/twitter-roberta-base-hate-latest,hatexplain_toxic,0.871,nghi rò rỉ: tập huấn luyện gộp 13 dataset hate
+bert-tiny-finetuned-sms-spam-detection,mrm8488/bert-tiny-finetuned-sms-spam-detection,sms_spam,0.97,nghi rò rỉ: huấn luyện trên SMS Spam Collection

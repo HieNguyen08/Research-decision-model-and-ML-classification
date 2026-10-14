@@ -1,0 +1,5 @@
+model,pr_auc,roc_auc,recall@1%fpr,f1,ece,brier,pr_auc_wording_generic,pr_auc_wording_task,pr_auc_clean,pr_auc_obf0.3,obf_drop_%
+Jev-like qwen2.5-1.5b,0.56,0.786,0.136,0.505,0.23,0.207,0.56,0.588,0.56,0.532,-4.979
+TF-IDF LogReg (trained),0.756,0.853,0.426,0.678,0.095,0.128,,,0.756,0.722,-4.493
+TF-IDF Stacking (trained),0.761,0.857,0.434,0.697,0.094,0.126,,,0.761,0.727,-4.462
+WaterSheep,0.688,0.819,0.365,0.665,0.269,0.259,0.688,0.698,0.688,0.682,-0.863

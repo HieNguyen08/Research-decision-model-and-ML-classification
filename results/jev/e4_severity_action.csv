@@ -1,0 +1,7 @@
+task,auc(severity),%reply_normally | positive,%reply_with_deescalation | positive,%escalate_to_supervisor | positive,%block_and_report | positive,%reply_normally | negative,%reply_with_deescalation | negative,%escalate_to_supervisor | negative,%block_and_report | negative
+jigsaw_toxic,1.0,0.0,51.6,22.6,25.8,51.7,42.0,0.4,5.9
+tweeteval_offensive,0.8,2.4,60.7,4.8,32.1,30.6,49.5,1.4,18.5
+tweeteval_hate,0.6,0.0,17.5,15.9,66.7,2.9,33.3,10.9,52.9
+davidson_hate,0.7,0.0,17.6,29.4,52.9,4.9,35.0,30.0,30.0
+hatexplain_toxic,0.6,1.1,33.7,12.9,52.2,8.2,51.6,7.4,32.8
+sms_spam,0.6,7.5,12.5,0.0,80.0,33.8,64.2,1.2,0.8

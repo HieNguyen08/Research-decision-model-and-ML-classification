@@ -1,0 +1,7 @@
+task,model,roc_auc,pr_auc,base_rate,auc(score risk)
+sim_cod_refusal,WaterSheep,0.411,0.134,0.147,0.484
+sim_cod_refusal,Jev-like qwen2.5-1.5b,0.71,0.277,0.147,0.497
+sim_cod_refusal,LogReg trained on full data (nb 02),0.787,0.555,0.14,
+sim_chargeback,WaterSheep,0.251,0.024,0.035,0.725
+sim_chargeback,Jev-like qwen2.5-1.5b,0.732,0.076,0.035,0.803
+sim_chargeback,LogReg trained on full data (nb 02),0.895,0.62,0.025,
