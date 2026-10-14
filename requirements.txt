@@ -1,0 +1,16 @@
+# Core (notebooks 01-02, chạy được trên CPU)
+numpy>=1.26
+pandas>=2.1
+scipy>=1.11
+scikit-learn>=1.4
+xgboost>=2.0
+lightgbm>=4.0
+catboost>=1.2
+matplotlib>=3.8
+seaborn>=0.13
+pymcdm>=1.2        # chỉ dùng để đối chiếu cài đặt MCDM
+# LLM (notebook 03, nên chạy trên Colab GPU)
+torch>=2.2
+transformers>=4.51
+accelerate>=0.30
+bitsandbytes>=0.43 ; platform_system == "Linux"
