@@ -1,0 +1,3 @@
+model,brier@labels=0,brier@labels=20,brier@labels=50,ece@labels=0,ece@labels=20,ece@labels=50
+Jev-like qwen2.5-1.5b,0.2074,0.1787,0.1388,0.2297,0.1681,0.0702
+WaterSheep,0.2592,0.2225,0.1085,0.2687,0.1982,0.0526

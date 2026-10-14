@@ -1,0 +1,5 @@
+model,davidson_hate,hatexplain_toxic,jigsaw_toxic,sms_spam,tweeteval_hate,tweeteval_offensive,MEAN
+TF-IDF Stacking (trained),0.549,0.923,0.921,0.983,0.491,0.696,0.761
+TF-IDF LogReg (trained),0.55,0.909,0.928,0.978,0.511,0.662,0.756
+WaterSheep,0.129,0.767,0.913,1.0,0.539,0.78,0.688
+Jev-like qwen2.5-1.5b,0.263,0.641,0.525,0.738,0.544,0.649,0.56

@@ -1,0 +1,41 @@
+kind,model,shots,variant,pr_auc,roc_auc,recall@5%fpr
+LLM,gemma-3-1b,0,calibrated,0.433,0.705,0.141
+LLM,gemma-3-1b,0,raw,0.433,0.705,0.142
+LLM,gemma-3-1b,8,calibrated,0.56,0.754,0.293
+LLM,gemma-3-1b,8,raw,0.56,0.754,0.293
+LLM,llama-3.2-3b,0,calibrated,0.704,0.866,0.484
+LLM,llama-3.2-3b,0,raw,0.704,0.866,0.484
+LLM,llama-3.2-3b,8,calibrated,0.726,0.877,0.546
+LLM,llama-3.2-3b,8,raw,0.726,0.877,0.546
+LLM,phi-4-mini,0,calibrated,0.673,0.852,0.491
+LLM,phi-4-mini,0,raw,0.673,0.852,0.491
+LLM,phi-4-mini,8,calibrated,0.703,0.864,0.478
+LLM,phi-4-mini,8,raw,0.703,0.864,0.478
+LLM,qwen2.5-1.5b,0,calibrated,0.657,0.825,0.441
+LLM,qwen2.5-1.5b,0,raw,0.657,0.825,0.441
+LLM,qwen2.5-1.5b,8,calibrated,0.683,0.847,0.472
+LLM,qwen2.5-1.5b,8,raw,0.683,0.847,0.472
+LLM,qwen2.5-3b,0,calibrated,0.657,0.833,0.435
+LLM,qwen2.5-3b,0,raw,0.657,0.833,0.435
+LLM,qwen2.5-3b,8,calibrated,0.697,0.849,0.483
+LLM,qwen2.5-3b,8,raw,0.697,0.849,0.483
+LLM,qwen3-1.7b,0,calibrated,0.619,0.803,0.374
+LLM,qwen3-1.7b,0,raw,0.619,0.803,0.374
+LLM,qwen3-1.7b,8,calibrated,0.666,0.831,0.436
+LLM,qwen3-1.7b,8,raw,0.666,0.831,0.436
+LLM,qwen3-4b,0,calibrated,0.669,0.861,0.379
+LLM,qwen3-4b,0,raw,0.705,0.865,0.497
+LLM,qwen3-4b,8,calibrated,0.592,0.842,0.246
+LLM,qwen3-4b,8,raw,0.712,0.861,0.531
+classical (TF-IDF),TF-IDF LightGBM,0,raw,0.741,0.855,0.606
+classical (TF-IDF),TF-IDF LogReg,0,raw,0.756,0.853,0.594
+classical (TF-IDF),TF-IDF NaiveBayes,0,raw,0.699,0.828,0.536
+classical (TF-IDF),TF-IDF Stacking,0,raw,0.761,0.857,0.596
+fine-tuned classifier,bert-tiny-finetuned-sms-spam-detection,0,raw,0.97,0.994,0.95
+fine-tuned classifier,toxic-bert,0,raw,0.826,0.835,0.564
+fine-tuned classifier,twitter-roberta-base-hate-latest,0,raw,0.688,0.861,0.51
+fine-tuned classifier,twitter-roberta-base-offensive,0,raw,0.793,0.835,0.524
+guard,llama-guard-3-1b,0,raw,0.452,0.685,0.279
+guard,qwen3guard-0.6b,0,raw,0.515,0.772,0.256
+guard,qwen3guard-4b,0,raw,0.551,0.816,0.268
+guard,shieldgemma-2b,0,raw,0.598,0.804,0.371

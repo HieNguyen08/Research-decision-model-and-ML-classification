@@ -1,0 +1,7 @@
+task,method,roc_auc@0_labels,roc_auc@16_labels,roc_auc@32_labels,roc_auc@64_labels,roc_auc@128_labels,roc_auc@256_labels
+sim_chargeback,LLM zero-shot,0.251,,,,,
+sim_chargeback,LogReg (X + LLM prior),,0.895,0.891,0.883,0.879,0.874
+sim_chargeback,LogReg (X),,0.897,0.896,0.884,0.879,0.874
+sim_cod_refusal,LLM zero-shot,0.411,,,,,
+sim_cod_refusal,LogReg (X + LLM prior),,0.642,0.674,0.688,0.713,0.752
+sim_cod_refusal,LogReg (X),,0.638,0.674,0.689,0.712,0.748
