@@ -152,6 +152,23 @@ def load_sms_spam(seed=0) -> TextTask:
                   "SMS", seed=seed)
 
 
+def load_davidson_abusive(seed=0) -> TextTask:
+    """Davidson với định nghĩa sát nhu cầu CS: (hate + offensive) so với bình thường.
+    Đồng thuận người gán nhãn cao hơn nhiều (Fleiss κ ≈ 0.73, so với ≈ 0.25 của hate so với phần còn lại)."""
+    df = pd.read_csv(io.BytesIO(_get("davidson", "davidson_labeled_data.csv")))
+    return _split("davidson_abusive", df["tweet"], (df["class"] != 2).astype(int), "offensive",
+                  "Is this message abusive (hateful, offensive or profane), as opposed to neutral?", "Twitter", seed=seed)
+
+
+def load_sms_spam_dedup(seed=0) -> TextTask:
+    """SMS Spam Collection sau khi bỏ tin trùng (414 dòng) – tránh cùng một tin nằm ở cả train lẫn test."""
+    df = pd.read_csv(io.BytesIO(_get("sms", "sms_spam.tsv")), sep="\t", header=None, names=["label", "text"])
+    df = df.drop_duplicates(subset="text")
+    return _split("sms_spam_dedup", df["text"], (df["label"] == "spam").astype(int), "spam",
+                  "Is this message spam (unsolicited advertising, scam, phishing or prize/lottery bait)?",
+                  "SMS", seed=seed)
+
+
 def load_internal_csv(path, text_col="text", label_col="label", name="internal", category="toxic",
                       question="Is this customer message toxic or abusive?", test_size=0.2, seed=0) -> TextTask:
     """Cắm dữ liệu nội bộ (vd. log chat CS đã gán nhãn 0/1) vào cùng pipeline."""
@@ -170,8 +187,16 @@ TASKS = {
 }
 
 
+# biến thể bổ sung (không nằm trong 6 task mặc định của notebook 01–05)
+EXTRA_TASKS = {
+    "davidson_abusive": load_davidson_abusive,
+    "sms_spam_dedup": load_sms_spam_dedup,
+}
+
+
 def load_tasks(names=None) -> dict[str, TextTask]:
-    return {n: TASKS[n]() for n in (names or TASKS)}
+    reg = {**TASKS, **EXTRA_TASKS}
+    return {n: reg[n]() for n in (names or TASKS)}
 
 
 # --------------------------------------------------------------------------- obfuscation (né bộ lọc)
