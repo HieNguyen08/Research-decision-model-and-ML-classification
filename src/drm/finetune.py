@@ -16,7 +16,7 @@ import numpy as np
 from sklearn.metrics import average_precision_score
 from sklearn.model_selection import train_test_split
 
-VERSION = "2"  # 2: nạp trọng số fp32 + tự huấn luyện lại khi NaN/sập (sửa lỗi DeBERTa-v3 ra NaN)
+VERSION = "3"  # 2: nạp trọng số fp32 + tự huấn luyện lại khi NaN/sập (sửa lỗi DeBERTa-v3 ra NaN); 3: nạp được WaterSheep
 
 
 @dataclass
@@ -71,7 +71,7 @@ ENCODERS = {
     # bản thường v2.0 đã học trên Davidson, HateXplain, Jigsaw, spam -> rò rỉ test.
     "deberta-v3-large-zeroshot-c": ("MoritzLaurer/deberta-v3-large-zeroshot-v2.0-c", FTConfig(lr=1e-5, batch_size=16)),
     # Decision model mở họ Jev (ModernBERT-base + đầu quyết định RLCD): fine-tune có giám sát, so với modernbert-base.
-    # Nếu repo không nạp được như encoder chuẩn, vòng lặp sẽ báo lỗi và bỏ qua.
+    # Chỉ lấy encoder (đầu RLCD bỏ đi), nạp bằng load_watersheep_encoder.
     "watersheep-ft": ("samratduttaofficial/WaterSheep", FTConfig(lr=5e-5, max_len=256)),
 }
 LORA_LLMS = {
@@ -113,6 +113,9 @@ def load_model(model_id: str, cfg: FTConfig, device):
     import torch
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
+    if model_id in WATERSHEEP_LIKE:
+        tok, model = load_watersheep_encoder(model_id)
+        return tok, model.to(device)
     tok = AutoTokenizer.from_pretrained(model_id)
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
@@ -127,6 +130,33 @@ def load_model(model_id: str, cfg: FTConfig, device):
         if cfg.lora:
             model.enable_input_require_grads()
     return tok, model.to(device)
+
+
+def load_watersheep_encoder(model_id: str):
+    """WaterSheep không nạp được như encoder chuẩn: tokenizer nằm ở thư mục con ``tokenizer/``, còn mô hình là lớp
+    tự viết (``trust_remote_code``) không có bản ``ForSequenceClassification``. Ở đây lấy phần encoder ModernBERT
+    (khoá ``encoder.*``) gắn vào ``ModernBertForSequenceClassification`` 1 logit; đầu RLCD (proj/mix/out) bị bỏ,
+    đầu phân loại khởi tạo mới – cùng kiến trúc với ``modernbert-base`` để so sánh công bằng. Không chạy code từ repo."""
+    import torch
+    from huggingface_hub import hf_hub_download
+    from safetensors.torch import load_file
+    from transformers import AutoConfig, AutoModelForSequenceClassification, AutoTokenizer
+
+    tok = AutoTokenizer.from_pretrained(model_id, subfolder="tokenizer")
+    conf = AutoConfig.from_pretrained(model_id, subfolder="encoder", num_labels=1)
+    model = AutoModelForSequenceClassification.from_config(conf, **_dtype_kw(torch.float32))
+    sd = load_file(hf_hub_download(model_id, "model.safetensors"))
+    enc = {"model." + k[len("encoder."):]: v.float() for k, v in sd.items() if k.startswith("encoder.")}
+    missing, unexpected = model.load_state_dict(enc, strict=False)
+    base = [k for k in missing if k.startswith("model.")]
+    if base or unexpected or not enc:
+        raise RuntimeError(f"Trọng số encoder WaterSheep không khớp ModernBERT: thiếu {base[:5]}, thừa {unexpected[:5]}")
+    model.config.pad_token_id = tok.pad_token_id
+    return tok, model
+
+
+# Repo chỉ nạp được qua load_watersheep_encoder (xem hàm trên)
+WATERSHEEP_LIKE = {"samratduttaofficial/WaterSheep"}
 
 
 def add_lora(model, lora: dict):
