@@ -16,6 +16,8 @@ import numpy as np
 from sklearn.metrics import average_precision_score
 from sklearn.model_selection import train_test_split
 
+VERSION = "2"  # 2: nạp trọng số fp32 + tự huấn luyện lại khi NaN/sập (sửa lỗi DeBERTa-v3 ra NaN)
+
 
 @dataclass
 class FTConfig:
