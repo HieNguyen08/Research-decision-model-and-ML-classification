@@ -65,3 +65,46 @@ def test_embedding_classifier_runs():
                                   extra_tests={"same": list(task.X_test)})
     assert res.p_test.shape == (len(task.y_test),) and np.isfinite(res.p_test).all()
     np.testing.assert_allclose(res.p_extra["same"], res.p_test, rtol=1e-5)
+
+
+def test_full_finetune_loads_fp32_weights_and_lora_bf16(monkeypatch):
+    """transformers >= 5 nạp mặc định theo kiểu đã lưu (DeBERTa-v3: fp16) -> phải ép fp32 khi fine-tune toàn phần."""
+    import transformers
+    seen = []
+    tok, tiny = FT.tiny_random_encoder()
+    monkeypatch.setattr(transformers.AutoTokenizer, "from_pretrained", lambda *a, **k: tok)
+    monkeypatch.setattr(transformers.AutoModelForSequenceClassification, "from_pretrained",
+                        lambda *a, **k: seen.append(k) or tiny)
+    FT.load_model("any/encoder", FT.FTConfig(), "cpu")
+    dt = seen[-1].get("dtype", seen[-1].get("torch_dtype"))
+    assert dt == torch.float32
+    monkeypatch.setattr(FT, "add_lora", lambda m, lora: m)
+    FT.load_model("any/llm", FT.FTConfig(lora={"r": 4}), "cpu")
+    assert seen[-1].get("dtype", seen[-1].get("torch_dtype")) == torch.bfloat16
+
+
+def _fake_result(best, y):
+    return FT.FTResult("", np.zeros(len(y)), y, np.zeros(3), best_val_pr_auc=best)
+
+
+@pytest.mark.parametrize("failure", ["nan", "collapse"])
+def test_finetune_retries_once_with_lower_lr(monkeypatch, failure):
+    y = np.array([0, 0, 0, 1] * 25)
+    tok, tiny = FT.tiny_random_encoder()
+    monkeypatch.setattr(FT, "load_model", lambda mid, cfg, dev: (tok, tiny))
+    calls = []
+
+    def fake_train(task, model, tok_, cfg, device, log, extra, attempt=0):
+        calls.append((cfg.lr, cfg.bf16, attempt))
+        if attempt == 0:
+            if failure == "nan":
+                raise FT.TrainingDiverged("loss = nan")
+            return _fake_result(0.26, y)  # ≈ tỉ lệ dương 0.25 -> sập
+        return _fake_result(0.9, y)
+
+    monkeypatch.setattr(FT, "_train", fake_train)
+    res = FT.finetune(toy_task(), "any/model", FT.FTConfig(lr=2e-5, bf16=True), name="m", log=lambda *_: None)
+    assert [c[2] for c in calls] == [0, 1] and calls[1][0] == 1e-5
+    assert calls[1][1] is (failure != "nan")  # ra NaN -> tắt bf16 cho encoder
+    assert res.config["attempts"] == 2 and res.best_val_pr_auc == 0.9 and res.name == "m"
+    assert FT.collapsed(0.26, y) and not FT.collapsed(0.9, y)

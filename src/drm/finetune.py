@@ -29,7 +29,8 @@ class FTConfig:
     patience: int = 3            # số lần đánh giá liên tiếp không cải thiện thì dừng
     grad_accum: int = 1
     bf16: bool = True
-    seed: int = 0
+    seed: int = 0                # khởi tạo đầu phân loại + thứ tự batch
+    split_seed: int = 0          # cách chia train/validation: giữ cố định để ghép nhiều seed/mô hình trên cùng validation
     lora: dict | None = None     # vd. {"r": 16, "alpha": 32, "dropout": 0.05} -> LoRA cho decoder
     grad_checkpointing: bool = False
     pos_weight: float | None = None
@@ -47,6 +48,11 @@ class FTResult:
     best_val_pr_auc: float = 0.0
     ms_per_msg: float = 0.0       # suy luận trên test (batch), GPU hiện tại
     p_extra: dict = field(default_factory=dict)  # điểm trên các bản test biến đổi (vd. obfuscation)
+    config: dict = field(default_factory=dict)   # cấu hình thực tế (sau khi tự huấn luyện lại, nếu có)
+
+
+class TrainingDiverged(RuntimeError):
+    """Loss hoặc điểm dự đoán không hữu hạn (NaN/inf) trong lúc huấn luyện."""
 
 
 # Mô hình đề xuất (Hugging Face id, cấu hình). Đều công khai, không cần chấp nhận license, trừ khi ghi chú.
@@ -78,6 +84,7 @@ LORA_LLMS = {
 EMBEDDERS = {
     "qwen3-emb-0.6b-lr": "Qwen/Qwen3-Embedding-0.6B",
     "qwen3-emb-4b-lr": "Qwen/Qwen3-Embedding-4B",
+    "qwen3-emb-8b-lr": "Qwen/Qwen3-Embedding-8B",
 }
 
 
@@ -87,17 +94,28 @@ def split_train_val(task, seed=0, val_size=0.1):
     return list(Xtr), list(Xva), np.asarray(ytr), np.asarray(yva)
 
 
+def _dtype_kw(dtype) -> dict:
+    """``dtype=`` (transformers >= 4.56) hoặc ``torch_dtype=`` (bản cũ)."""
+    import transformers
+    from packaging.version import Version
+
+    return {"dtype": dtype} if Version(transformers.__version__) >= Version("4.56") else {"torch_dtype": dtype}
+
+
 def load_model(model_id: str, cfg: FTConfig, device):
-    """Tải tokenizer + mô hình phân loại 1 logit; gắn LoRA nếu ``cfg.lora``."""
+    """Tải tokenizer + mô hình phân loại 1 logit; gắn LoRA nếu ``cfg.lora``.
+
+    Fine-tune toàn phần luôn giữ trọng số ở **fp32** (tính toán vẫn bf16 qua autocast). Lý do: transformers >= 5
+    mặc định ``dtype="auto"``, tức nạp đúng kiểu đã lưu; DeBERTa-v3 lưu ở fp16, nên AdamW chạy trên trọng số fp16
+    và ra NaN ngay. LoRA: mô hình gốc bf16 (đóng băng), adapter + đầu phân loại fp32."""
     import torch
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
     tok = AutoTokenizer.from_pretrained(model_id)
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
-    kw = {"num_labels": 1, "ignore_mismatched_sizes": True}
-    if cfg.lora:
-        kw["torch_dtype"] = torch.bfloat16
+    kw = {"num_labels": 1, "ignore_mismatched_sizes": True,
+          **_dtype_kw(torch.bfloat16 if cfg.lora else torch.float32)}
     model = AutoModelForSequenceClassification.from_pretrained(model_id, **kw)
     model.config.pad_token_id = tok.pad_token_id
     if cfg.lora:
@@ -114,29 +132,72 @@ def add_lora(model, lora: dict):
 
     conf = LoraConfig(task_type=TaskType.SEQ_CLS, r=lora.get("r", 16), lora_alpha=lora.get("alpha", 32),
                       lora_dropout=lora.get("dropout", 0.05), target_modules=lora.get("targets", "all-linear"))
-    return get_peft_model(model, conf)  # đầu phân loại ("score") được peft tự để huấn luyện toàn phần
+    model = get_peft_model(model, conf)  # đầu phân loại ("score") được peft tự để huấn luyện toàn phần
+    for p in model.parameters():  # adapter + đầu phân loại ở fp32 (ổn định hơn khi cập nhật bằng AdamW)
+        if p.requires_grad:
+            p.data = p.data.float()
+    return model
+
+
+def collapsed(best_val_pr_auc: float, y_val, min_lift=0.05) -> bool:
+    """Mô hình "sập" (đoán gần như hằng số): PR-AUC validation chỉ nhỉnh hơn tỉ lệ dương rất ít."""
+    base = float(np.mean(y_val))
+    return (best_val_pr_auc - base) / max(1 - base, 1e-9) < min_lift
 
 
 def finetune(task, model_id: str | None = None, cfg: FTConfig | None = None, name: str | None = None,
-             model=None, tokenizer=None, device=None, log=print, extra_tests: dict | None = None) -> FTResult:
+             model=None, tokenizer=None, device=None, log=print, extra_tests: dict | None = None,
+             retry: bool = True) -> FTResult:
     """Fine-tune một mô hình trên ``task`` (hoặc truyền sẵn ``model``/``tokenizer`` – dùng cho chạy thử).
 
-    ``extra_tests``: {tên: danh sách tin} được chấm thêm sau khi huấn luyện (vd. test đã làm nhiễu), cùng thứ tự với test."""
+    ``extra_tests``: {tên: danh sách tin} được chấm thêm sau khi huấn luyện (vd. test đã làm nhiễu), cùng thứ tự với test.
+    ``retry``: nếu huấn luyện ra NaN hoặc mô hình sập, tự nạp lại và huấn luyện lại **một lần** với learning rate
+    giảm một nửa (và tắt bf16 nếu ra NaN với encoder), giữ nguyên cách chia train/validation."""
+    import gc
+
     import torch
-    from transformers import get_linear_schedule_with_warmup
 
     cfg = cfg or FTConfig()
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-    torch.manual_seed(cfg.seed)
-    np.random.seed(cfg.seed)
-    if model is None:
-        tokenizer, model = load_model(model_id, cfg, device)
-    else:
-        model = model.to(device)
-        if cfg.lora:
-            model = add_lora(model, cfg.lora)
-    tok = tokenizer
-    Xtr, Xva, ytr, yva = split_train_val(task, cfg.seed)
+    can_reload = model_id is not None and model is None
+    for attempt in range(2 if retry and can_reload else 1):
+        if model is None:
+            tokenizer, model = load_model(model_id, cfg, device)
+        else:
+            model = model.to(device)
+            if cfg.lora:
+                model = add_lora(model, cfg.lora)
+        try:
+            res = _train(task, model, tokenizer, cfg, device, log, extra_tests, attempt)
+        except TrainingDiverged as e:
+            if attempt or not (retry and can_reload):
+                raise
+            log(f"  !! {e} -> huấn luyện lại với lr {cfg.lr / 2:g}" + ("" if cfg.lora else ", tắt bf16"))
+            cfg = FTConfig(**{**cfg.__dict__, "lr": cfg.lr / 2, "bf16": cfg.bf16 if cfg.lora else False})
+        else:
+            if attempt == 0 and retry and can_reload and collapsed(res.best_val_pr_auc, res.y_val):
+                log(f"  !! mô hình sập (PR-AUC validation {res.best_val_pr_auc:.3f} ≈ tỉ lệ dương "
+                    f"{np.mean(res.y_val):.3f}) -> huấn luyện lại với lr {cfg.lr / 2:g}")
+                cfg = FTConfig(**{**cfg.__dict__, "lr": cfg.lr / 2})
+            else:
+                res.name = name or model_id or type(model).__name__
+                res.config = {**{k: v for k, v in cfg.__dict__.items() if k != "lora"}, "lora": cfg.lora,
+                              "attempts": attempt + 1}
+                return res
+        del model
+        model = None
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    return res  # chỉ tới đây khi lần huấn luyện lại vẫn sập: trả về kết quả lần cuối để người dùng tự đánh giá
+
+
+def _train(task, model, tok, cfg: FTConfig, device, log, extra_tests, attempt=0) -> FTResult:
+    import torch
+    from transformers import get_linear_schedule_with_warmup
+
+    torch.manual_seed(cfg.seed + 1000 * attempt)
+    Xtr, Xva, ytr, yva = split_train_val(task, cfg.split_seed)  # cách chia không đổi giữa các lần thử / seed
     enc = lambda xs: tok([str(x) for x in xs], truncation=True, max_length=cfg.max_len)["input_ids"]
     Itr, Iva, Ite = enc(Xtr), enc(Xva), enc(list(task.X_test))
     use_bf16 = cfg.bf16 and device == "cuda" and torch.cuda.is_bf16_supported()
@@ -156,6 +217,8 @@ def finetune(task, model_id: str | None = None, cfg: FTConfig | None = None, nam
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=use_bf16):
                 logit = model(**batch(ids_list, idx)).logits[:, 0]
             out[idx] = logit.float().cpu().numpy()
+        if not np.isfinite(out).all():
+            raise TrainingDiverged("điểm dự đoán có NaN/inf")
         return out
 
     trainable = [p for p in model.parameters() if p.requires_grad]
@@ -167,7 +230,7 @@ def finetune(task, model_id: str | None = None, cfg: FTConfig | None = None, nam
     loss_fn = torch.nn.BCEWithLogitsLoss(pos_weight=pw)
     yt = torch.tensor(ytr, dtype=torch.float32)
     eval_every = max(1, steps_per_epoch // cfg.eval_per_epoch)
-    rng = np.random.default_rng(cfg.seed)
+    rng = np.random.default_rng(cfg.seed + 1000 * attempt)
     best, best_state, bad, step, hist = -1.0, None, 0, 0, []
     t0 = time.perf_counter()
     done = False
@@ -179,6 +242,8 @@ def finetune(task, model_id: str | None = None, cfg: FTConfig | None = None, nam
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=use_bf16):
                 logit = model(**batch(Itr, idx)).logits[:, 0]
             loss = loss_fn(logit.float(), yt[idx].to(device)) / cfg.grad_accum
+            if not torch.isfinite(loss):
+                raise TrainingDiverged(f"loss = {loss.item()} ở bước {step}")
             loss.backward()
             if (k // cfg.batch_size + 1) % cfg.grad_accum:
                 continue
@@ -215,8 +280,7 @@ def finetune(task, model_id: str | None = None, cfg: FTConfig | None = None, nam
     p_test = sig(predict(Ite))
     ms = 1000 * (time.perf_counter() - t1) / max(len(Ite), 1)
     p_extra = {k: sig(predict(enc(list(v)))) for k, v in (extra_tests or {}).items()}
-    return FTResult(name or model_id or type(model).__name__, p_val, yva, p_test, hist, fit_time,
-                    sum(p.numel() for p in trainable), best, ms, p_extra)
+    return FTResult("", p_val, yva, p_test, hist, fit_time, sum(p.numel() for p in trainable), best, ms, p_extra)
 
 
 def tfidf_val_test(task, seed=0):
@@ -309,10 +373,10 @@ def embedding_classifier(task, model_id: str | None = None, name: str | None = N
     if model is None:
         from transformers import AutoModel, AutoTokenizer
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = AutoModel.from_pretrained(model_id, torch_dtype=torch.bfloat16 if device == "cuda" else None)
+        model = AutoModel.from_pretrained(model_id, **_dtype_kw(torch.bfloat16 if device == "cuda" else torch.float32))
     model = model.to(device)
     instr = f"Instruct: {task.question}\nQuery: "
-    Xtr, Xva, ytr, yva = split_train_val(task, seed)
+    Xtr, Xva, ytr, yva = split_train_val(task, 0)  # cùng validation với các mô hình khác (LogReg tất định, seed không đổi kết quả)
     t0 = time.perf_counter()
     emb = lambda xs: embed_texts(xs, model, tokenizer, instr, batch_size=batch_size, device=device)
     Etr, Eva = emb(Xtr), emb(Xva)
