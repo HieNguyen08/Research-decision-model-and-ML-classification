@@ -18,6 +18,7 @@
 | Tự động hoá được bao nhiêu? | 84% tin nhắn với ≤ 1% lỗi; 94% với ≤ 2% lỗi (selective classification) | nb 04 |
 | LLM nhỏ (1–4B) thay được TF-IDF không? | **Chưa**: tốt nhất là llama-3.2-3b 8-shot với PR-AUC 0.726, so với 0.756. Nhưng **ghép LLM zero-shot + TF-IDF** đạt **0.793 (+4.9%)**, cao nhất nghiên cứu. LLM thắng lớn khi dữ liệu lệch phân phối (TweetEval-hate 0.761 so với 0.511) | nb 03 |
 | Guard model (Llama Guard, Qwen3Guard, ShieldGemma)? | **Không hợp nếu dùng nguyên trạng** (PR-AUC 0.45–0.60): danh mục vi phạm không có lăng mạ/spam; chậm 85–570 ms/tin | nb 03 |
+| Có đạt PR-AUC ≥ 0.90 được không? | **Có ở Jigsaw, HateXplain, spam** (nhờ fine-tune transformer, nb 06). **Không thể ở Davidson-hate** (trần nhãn ≈ 0.45–0.56: chính người gán nhãn chỉ đồng ý F1 0.28) **và HatEval** (test lệch phân phối: 0.83 khi kiểm định chéo so với 0.54 trên test). Đo Davidson theo định nghĩa "lăng mạ" sát nhu cầu CS thì đạt 0.996. ANN huấn luyện từ đầu (CNN/BiGRU/fastText/MLP) kém TF-IDF | docs/05, nb 06 |
 | Decision model zero-shot (họ Jev, bản mở WaterSheep)? | Với tin nhắn: đạt 91% PR-AUC của TF-IDF mà không cần nhãn, bền nhất trước né bộ lọc, nhưng **quá tự tin** nên cần khoảng 50 nhãn để hiệu chỉnh. Với đơn hàng: **không dùng được** (AUC < 0.5) | nb 05 |
 
 ## 2. Kết quả chi tiết
@@ -116,6 +117,16 @@ PR-AUC trung bình 6 task (cấu hình tốt nhất của mỗi mô hình, cùng
 * **Chi phí Jev thật cho cùng khối lượng** (8402 lần gọi, 4.94M token) theo giá công bố: khoảng **0.21 USD**.
 * Đối chiếu từng giả thuyết H0–H7: docs/04 mục 6.
 
+### 2.7 Hướng tới ≥ 0.90: mạng nơ-ron và mức trần dữ liệu (docs/05)
+* **ANN huấn luyện từ đầu trên CPU** (`results/nn`, toàn bộ test): PR-AUC trung bình là BiGRU 0.700, MLP 0.692, fastText-style 0.692, TextCNN 0.690, đều **thấp hơn TF-IDF + LogReg (0.734)**. Ghép với TF-IDF cũng không tăng trung bình. Đòn bẩy nằm ở **tiền huấn luyện** (fine-tune transformer, nb 06).
+* **Mức trần** (`results/ceiling`):
+  * Davidson-hate: PR-AUC trần khoảng 0.45–0.56, và TF-IDF đã đạt 0.43.
+  * HateXplain: trần 0.94–0.98.
+  * HatEval: lệch phân phối mạnh; 8% tin test trùng train nhưng chỉ 61% cùng nhãn.
+  * Tập con 300 tin quá nhỏ (Davidson có khoảng tin cậy [0.33, 0.77]), nên **từ nb 06 trở đi chỉ đánh giá trên toàn bộ test**.
+  * Trên toàn bộ test, mức xuất phát thực của TF-IDF là 0.734 chứ không phải 0.79.
+* **Mục tiêu đề xuất:** đạt **≥ 90% mức trần** của từng benchmark, báo cáo kèm tỉ lệ dương, ROC-AUC và khoảng tin cậy. Đặt "PR-AUC trung bình ≥ 0.90" thì kết quả phụ thuộc vào việc chọn benchmark nào.
+
 ## 3. Đóng góp / hướng cải tiến đã hiện thực
 
 | # | Cải tiến | Kết quả |
@@ -131,6 +142,8 @@ PR-AUC trung bình 6 task (cấu hình tốt nhất của mỗi mô hình, cùng
 | C9 | Bộ mô phỏng bùng hàng + schema dữ liệu; pipeline hoá đơn giả | nền tảng để cắm dữ liệu nội bộ |
 | C10 | **Decision model zero-shot họ Jev**: client có cache, adapter WaterSheep (mở) và Jev-like, 7 thí nghiệm | WaterSheep: 91% PR-AUC của TF-IDF không cần nhãn; bền nhất trước obfuscation (−0.9%); 50 nhãn đưa ECE từ 0.27 xuống 0.05; ghép với TF-IDF +2.2%; **thất bại với đơn hàng**. Jev thật chờ credit (khoảng 0.21 USD) |
 | C11 | Phát hiện & sửa lỗi bão hoà float32 khi chấm LLM (điểm hoà nhau ở p = 1) | xếp hạng theo log-odds; có test hồi quy; ảnh hưởng tới số của qwen3-4b |
+| C12 | Phân tích mức trần dữ liệu (đồng thuận người gán nhãn, gán nhãn lại, lệch phân phối, tin trùng, khoảng tin cậy của tập test) | chỉ ra mục tiêu ≥ 0.90 khả thi ở đâu; Davidson-hate trần khoảng 0.45–0.56 |
+| C13 | ANN (CPU) + pipeline fine-tune transformer / LoRA / embedding + ghép tham lam (nb 06) | ANN không tiền huấn luyện kém TF-IDF (0.69–0.70 so với 0.734); nb 06 **chờ chạy Colab** |
 
 ## 4. Hạn chế
 * Chi phí trong `CostModel`/`COSTS` là giả định; bùng hàng/chargeback dùng dữ liệu mô phỏng.
@@ -144,13 +157,14 @@ PR-AUC trung bình 6 task (cấu hình tốt nhất của mỗi mô hình, cùng
    * chạy lại E5 với prior của Jev-like Qwen (LLM đọc JSON đơn hàng tốt hơn WaterSheep);
    * nếu có credit, thêm `TYPESAFE_API_KEY` để so Jev thật (khoảng 0.21 USD);
    * nhớ đặt `PUSH_RESULTS = True` hoặc tải thư mục `results/` để giữ file điểm.
-2. **Kiến trúc đề xuất cho chat CS** (từ nb 03–05):
+2. **Chạy notebook 06 trên Colab A100** (fine-tune transformer + ghép mô hình; nhóm `CORE` khoảng 2–3 giờ). Đặt `PUSH_RESULTS = True`, hoặc để mặc định để tải file zip kết quả về.
+3. **Kiến trúc đề xuất cho chat CS** (từ nb 03–05):
    * TF-IDF huấn luyện trên nhãn nội bộ, ghép (rank-average) với một LLM 3–4B hoặc WaterSheep đã hiệu chỉnh bằng khoảng 50 nhãn;
    * đưa xác suất vào chính sách Bayes chi phí (nb 04);
    * LLM sinh giải thích cho nhân viên;
    * không dùng guard model nguyên trạng, và không để mô hình zero-shot tự chọn hành động.
-3. **Dữ liệu nội bộ:** gán nhãn khoảng 2–5k tin nhắn chat CS (toxic/abusive/threat/spam-scam) và lịch sử đơn bùng/chargeback; chạy lại toàn bộ bằng `load_internal_csv` và `load_internal_orders`.
-4. **Định lượng chi phí** với CS lead, finance và legal (AHP/BWM để ra tỉ lệ chi phí), rồi cập nhật `CostModel`.
-5. Fine-tune transformer nhỏ (DistilRoBERTa) hoặc LoRA cho LLM trên dữ liệu nội bộ; active learning với LLM làm bộ gán nhãn sơ bộ.
-6. Uplift modeling cho can thiệp bùng hàng (gọi xác minh hay yêu cầu cọc); chính sách robust theo bất định chi phí (minimax regret).
-7. Hiện thực pipeline hoá đơn giả (docs/03) và cắm `p_doc_forged` vào triage.
+4. **Dữ liệu nội bộ:** gán nhãn khoảng 2–5k tin nhắn chat CS (toxic/abusive/threat/spam-scam) và lịch sử đơn bùng/chargeback; chạy lại toàn bộ bằng `load_internal_csv` và `load_internal_orders`.
+5. **Định lượng chi phí** với CS lead, finance và legal (AHP/BWM để ra tỉ lệ chi phí), rồi cập nhật `CostModel`.
+6. Fine-tune transformer nhỏ (DistilRoBERTa) hoặc LoRA cho LLM trên dữ liệu nội bộ; active learning với LLM làm bộ gán nhãn sơ bộ.
+7. Uplift modeling cho can thiệp bùng hàng (gọi xác minh hay yêu cầu cọc); chính sách robust theo bất định chi phí (minimax regret).
+8. Hiện thực pipeline hoá đơn giả (docs/03) và cắm `p_doc_forged` vào triage.

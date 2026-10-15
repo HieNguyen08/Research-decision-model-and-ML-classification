@@ -13,6 +13,7 @@ Nghiên cứu tổng hợp nhằm **phát hiện** và **ra quyết định xử
 | Hoá đơn / bằng chứng giả do AI | biên lai chuyển khoản giả, ảnh hàng lỗi do AI tạo | docs/03 |
 | **Ra quyết định** | chọn mô hình nào (MCDM), xử lý ca nào trước/chặn/chuyển người (triage) | 04 |
 | **Decision model zero-shot (WaterSheep mở / Jev)** | không cần dữ liệu gán nhãn: xác suất đã hiệu chỉnh + hành động đề xuất | 05 |
+| **Mạng nơ-ron (ANN) fine-tune** để đạt ≥ 0.90 | DeBERTa/RoBERTa/TimeLMs, embedding Qwen3 + LogReg, LoRA Qwen3-8B, ghép mô hình; mức trần của từng dataset | 06, docs/05 |
 
 Ngôn ngữ dữ liệu: **tiếng Anh**. Mã nguồn chạy được trên CPU; phần LLM chạy trên **Google Colab GPU**.
 
@@ -28,12 +29,15 @@ src/drm/            thư viện dùng chung
   decision.py       mô hình ra quyết định triage: luật, Bayes chi phí kỳ vọng + năng lực review, scorecard MCDM
   llm.py            LLM/guard model/classifier chuyên dụng: chấm điểm, few-shot, calibration, LLM-as-AHP-expert
   jev.py            decision model "System One": client Jev /v1/systemone (cache), adapter WaterSheep (mở) và Jev-like LLM, câu hỏi kiểm duyệt/đơn hàng/AHP
+  nn_text.py        ANN huấn luyện từ đầu trên CPU: MLP (TF-IDF), fastText-style, TextCNN, BiGRU
+  finetune.py       fine-tune transformer (encoder / LoRA LLM), embedding + LogReg, ghép mô hình tham lam (Colab GPU)
 notebooks/
   01_text_moderation_benchmark.ipynb      CPU
   02_fraud_chargeback_cod.ipynb           CPU
   03_llm_moderation_colab.ipynb           Colab GPU
   05_jev_zero_shot_decisions.ipynb        decision model zero-shot: WaterSheep (mở, miễn phí, mặc định) + Jev (nếu có credit)
   04_decision_models_cs_triage.ipynb      CPU
+  06_finetune_ann_colab.ipynb             Colab GPU (A100): fine-tune ANN, mục tiêu ≥ 0.90
   appendix/A1, A2                         benchmark & MCDM trên 14 dataset UCI (phương pháp luận)
 scripts/            chạy benchmark từ dòng lệnh
 results/            kết quả (CSV, NPZ, hình) – đã chạy sẵn
@@ -67,6 +71,8 @@ pip install -r requirements.txt
 PYTHONPATH=src python -m pytest tests -q              # kiểm thử
 PYTHONPATH=src python scripts/run_text_benchmark.py   # benchmark kiểm duyệt (~20-30 phút, 4 CPU)
 PYTHONPATH=src python scripts/run_fraud_benchmark.py  # benchmark gian lận
+PYTHONPATH=src python scripts/run_nn_benchmark.py      # ANN trên CPU (MLP, fastText-style, TextCNN, BiGRU)
+PYTHONPATH=src python scripts/analyze_ceilings.py     # mức trần: đồng thuận người gán nhãn, lệch phân phối, tin trùng
 jupyter lab notebooks/
 ```
 
@@ -83,4 +89,5 @@ Mọi hàm đánh giá, MCDM và chính sách quyết định đều nhận các
 * [docs/02_bao_cao_ket_qua.md](docs/02_bao_cao_ket_qua.md): **báo cáo kết quả tổng hợp** (bắt đầu đọc từ đây)
 * [docs/01_tong_quan_tai_lieu.md](docs/01_tong_quan_tai_lieu.md): lý thuyết mô hình ra quyết định, MCDM, cây quyết định, kiểm duyệt nội dung, LLM, gian lận, hoá đơn giả, khoảng trống nghiên cứu
 * [docs/04_jev_system_one.md](docs/04_jev_system_one.md): **Jev & họ decision model "System One"**: API, bằng chứng, bản tái hiện mở, rủi ro, giả thuyết
+* [docs/05_jev_mo_va_ann.md](docs/05_jev_mo_va_ann.md): **mô hình mở họ Jev, mạng nơ-ron (ANN) và mức trần của từng dataset**: hướng nào đưa được lên ≥ 0.90
 * [docs/03_pipeline_hoa_don_gia.md](docs/03_pipeline_hoa_don_gia.md): thiết kế pipeline phát hiện hoá đơn/bằng chứng giả do AI tạo

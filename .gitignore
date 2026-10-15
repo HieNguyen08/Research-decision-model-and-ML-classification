@@ -6,3 +6,8 @@ data/raw/
 *.egg-info/
 results/llm_dryrun/
 results/jev_dryrun/
+
+# thư mục làm việc (ghi chú nghiên cứu thô, bản nháp báo cáo, kết quả chạy thử)
+research_notes/
+reports/
+results/finetune_dryrun/
