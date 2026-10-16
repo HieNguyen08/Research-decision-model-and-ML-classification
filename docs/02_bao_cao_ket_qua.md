@@ -11,7 +11,7 @@
 | Mô hình nào phát hiện tin nhắn độc hại/spam tốt nhất? | **TF-IDF (từ + ký tự) + LogReg/LinearSVM**: PR-AUC ngang Stacking (0.734–0.737 so với 0.740), nhanh, nhẹ, giải thích được. Ensemble cây đứng sau | nb 01 |
 | Cây quyết định có dùng được không? | Cây đơn kém nhất ở mọi bài toán, nhưng **cắt tỉa cost-complexity** cải thiện rõ (PR-AUC +0.11 trên văn bản, AUC +0.039 trên bảng; số lá giảm khoảng 5 lần) và cho **bộ luật đọc được** | nb 01, 02, A1 |
 | Người dùng né bộ lọc thì sao? | Mất 2–6% recall; **chuẩn hoá ngược** lấy lại 64–73%; đặc trưng ký tự bền hơn đặc trưng từ | nb 01 |
-| Mô hình công khai dùng cho chat CS được không? | **Rủi ro lớn**: đổi nguồn dữ liệu làm PR-AUC giảm 20–35%, nên **phải gán nhãn một mẫu chat nội bộ** | nb 01 |
+| Mô hình công khai dùng cho chat CS được không? | **Rủi ro lớn**: đổi nguồn dữ liệu làm PR-AUC của LogReg giảm 11–56% (trung vị khoảng 23%, `results/text/cross_domain.csv`), nên **phải gán nhãn một mẫu chat nội bộ** | nb 01 |
 | Gian lận thẻ / chargeback / bùng hàng? | Ensemble cây dẫn đầu (RF-balanced PR-AUC 0.821). Nhưng **chọn theo chi phí** thì CatBoost giảm nhiều nhất (−67.5%). Boosting mặc định **không ổn định** khi lớp dương cực hiếm, phải regularize | nb 02 |
 | Chọn mô hình khi nhiều tiêu chí xung đột? | MCDM (AHP + TOPSIS/VIKOR/PROMETHEE/EDAS + SMAA): kết quả **phụ thuộc mạnh vào chuẩn hoá**; phải kiểm tra độ nhạy. Với kiểm duyệt CS, LogReg đứng đầu ổn định (P(top1) ≈ 1.0) | nb 04, A2 |
 | Xử lý từng ca thế nào? | **Bayes chi phí kỳ vọng + phân bổ review theo lợi ích** thắng luật cố định 3.9–5.2% khi năng lực review ≥ 5%. Nhưng lợi thế **mất hết nếu chi phí bị ước lượng sai**, nên cần định lượng chi phí trước | nb 04 |
@@ -143,7 +143,7 @@ PR-AUC trung bình 6 task (cấu hình tốt nhất của mỗi mô hình, cùng
 | C10 | **Decision model zero-shot họ Jev**: client có cache, adapter WaterSheep (mở) và Jev-like, 7 thí nghiệm | WaterSheep: 91% PR-AUC của TF-IDF không cần nhãn; bền nhất trước obfuscation (−0.9%); 50 nhãn đưa ECE từ 0.27 xuống 0.05; ghép với TF-IDF +2.2%; **thất bại với đơn hàng**. Jev thật chờ credit (khoảng 0.21 USD) |
 | C11 | Phát hiện & sửa lỗi bão hoà float32 khi chấm LLM (điểm hoà nhau ở p = 1) | xếp hạng theo log-odds; có test hồi quy; ảnh hưởng tới số của qwen3-4b |
 | C12 | Phân tích mức trần dữ liệu (đồng thuận người gán nhãn, gán nhãn lại, lệch phân phối, tin trùng, khoảng tin cậy của tập test) | chỉ ra mục tiêu ≥ 0.90 khả thi ở đâu; Davidson-hate trần khoảng 0.45–0.56 |
-| C13 | ANN (CPU) + pipeline fine-tune transformer / LoRA / embedding + ghép tham lam (nb 06) | ANN không tiền huấn luyện kém TF-IDF (0.69–0.70 so với 0.734); nb 06 **chờ chạy Colab** |
+| C13 | ANN (CPU) + pipeline fine-tune transformer / LoRA / embedding + ghép tham lam (nb 06) | ANN không tiền huấn luyện kém TF-IDF (0.69–0.70 so với 0.734). nb 06 đã chạy (A100, 2026-10-15): ENS all 0.848, qwen3-emb-4b + LogReg 0.841, qwen3-8b LoRA 0.837, fbert 0.817, TF-IDF 0.798 (TB 8 task, toàn bộ test); chi tiết `results/finetune/README.md` |
 
 ## 4. Hạn chế
 * Chi phí trong `CostModel`/`COSTS` là giả định; bùng hàng/chargeback dùng dữ liệu mô phỏng.
@@ -157,14 +157,20 @@ PR-AUC trung bình 6 task (cấu hình tốt nhất của mỗi mô hình, cùng
    * chạy lại E5 với prior của Jev-like Qwen (LLM đọc JSON đơn hàng tốt hơn WaterSheep);
    * nếu có credit, thêm `TYPESAFE_API_KEY` để so Jev thật (khoảng 0.21 USD);
    * nhớ đặt `PUSH_RESULTS = True` hoặc tải thư mục `results/` để giữ file điểm.
-2. **Chạy notebook 06 trên Colab A100** (fine-tune transformer + ghép mô hình; nhóm `CORE` khoảng 2–3 giờ). Đặt `PUSH_RESULTS = True`, hoặc để mặc định để tải file zip kết quả về.
-3. **Kiến trúc đề xuất cho chat CS** (từ nb 03–05):
+2. ~~Chạy notebook 06 trên Colab A100~~ (xong 2026-10-15, xem `results/finetune/README.md`). Việc còn lại: đưa file điểm `.npz` từ Google Drive vào `results/finetune/` để tính paired bootstrap.
+3. **Notebook 07: decision model kiểu Rev/Kev (đã viết, chưa chạy).** Code `src/drm/rev.py`, `src/drm/rev_finetune.py`; chạy thử DRY_RUN trên CPU qua `tests/test_rev.py`. Cần chạy trên Colab A100 hoặc L4:
+   * E1: Rev-4B zero-shot trên 6 task của nb 05 (300 tin/task), so với WaterSheep 0.688 và TF-IDF 0.756 (`results/jev/`);
+   * E2: fine-tune theo công thức Rev trên Qwen3.5-4B (9B nếu đủ VRAM), 8 task nb 06, toàn bộ test, so với qwen3-8b LoRA 0.837 (`results/finetune/README.md`);
+   * E3 (tuỳ chọn): định tuyến intent Bitext, coverage ở mức lỗi 5%.
+
+   Giả thuyết đặt trước trong notebook: H1 zero-shot ≥ 0.718 và > 0.688; H2 fine-tune ≥ 0.827; H3 coverage ≥ 30% với lỗi ≤ 5%. Trọng số Rev công bố có học RACE (giấy phép nghiên cứu), nên chỉ dùng để đo.
+4. **Kiến trúc đề xuất cho chat CS** (từ nb 03–05):
    * TF-IDF huấn luyện trên nhãn nội bộ, ghép (rank-average) với một LLM 3–4B hoặc WaterSheep đã hiệu chỉnh bằng khoảng 50 nhãn;
    * đưa xác suất vào chính sách Bayes chi phí (nb 04);
    * LLM sinh giải thích cho nhân viên;
    * không dùng guard model nguyên trạng, và không để mô hình zero-shot tự chọn hành động.
-4. **Dữ liệu nội bộ:** gán nhãn khoảng 2–5k tin nhắn chat CS (toxic/abusive/threat/spam-scam) và lịch sử đơn bùng/chargeback; chạy lại toàn bộ bằng `load_internal_csv` và `load_internal_orders`.
-5. **Định lượng chi phí** với CS lead, finance và legal (AHP/BWM để ra tỉ lệ chi phí), rồi cập nhật `CostModel`.
-6. Fine-tune transformer nhỏ (DistilRoBERTa) hoặc LoRA cho LLM trên dữ liệu nội bộ; active learning với LLM làm bộ gán nhãn sơ bộ.
-7. Uplift modeling cho can thiệp bùng hàng (gọi xác minh hay yêu cầu cọc); chính sách robust theo bất định chi phí (minimax regret).
-8. Hiện thực pipeline hoá đơn giả (docs/03) và cắm `p_doc_forged` vào triage.
+5. **Dữ liệu nội bộ:** gán nhãn khoảng 2–5k tin nhắn chat CS (toxic/abusive/threat/spam-scam) và lịch sử đơn bùng/chargeback; chạy lại toàn bộ bằng `load_internal_csv` và `load_internal_orders`.
+6. **Định lượng chi phí** với CS lead, finance và legal (AHP/BWM để ra tỉ lệ chi phí), rồi cập nhật `CostModel`.
+7. Fine-tune transformer nhỏ (DistilRoBERTa) hoặc LoRA cho LLM trên dữ liệu nội bộ; active learning với LLM làm bộ gán nhãn sơ bộ.
+8. Uplift modeling cho can thiệp bùng hàng (gọi xác minh hay yêu cầu cọc); chính sách robust theo bất định chi phí (minimax regret).
+9. Hiện thực pipeline hoá đơn giả (docs/03) và cắm `p_doc_forged` vào triage.

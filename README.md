@@ -1,6 +1,6 @@
 # Mô hình ra quyết định & phân loại ML/LLM cho Trust & Safety trong CS e-commerce
 
-> **Kết quả chính:** xem [docs/02_bao_cao_ket_qua.md](docs/02_bao_cao_ket_qua.md).
+> **Kết quả chính:** xem [docs/02_bao_cao_ket_qua.md](docs/02_bao_cao_ket_qua.md). Kết quả notebook 06 (fine-tune, A100): [results/finetune/README.md](results/finetune/README.md).
 
 Nghiên cứu tổng hợp nhằm **phát hiện** và **ra quyết định xử lý** các tình huống rủi ro mà đội Customer Service gặp hằng ngày:
 
@@ -14,6 +14,7 @@ Nghiên cứu tổng hợp nhằm **phát hiện** và **ra quyết định xử
 | **Ra quyết định** | chọn mô hình nào (MCDM), xử lý ca nào trước/chặn/chuyển người (triage) | 04 |
 | **Decision model zero-shot (WaterSheep mở / Jev)** | không cần dữ liệu gán nhãn: xác suất đã hiệu chỉnh + hành động đề xuất | 05 |
 | **Mạng nơ-ron (ANN) fine-tune** để đạt ≥ 0.90 | DeBERTa/RoBERTa/TimeLMs, embedding Qwen3 + LogReg, LoRA Qwen3-8B, ghép mô hình; mức trần của từng dataset | 06, docs/05 |
+| **Decision model kiểu Rev/Kev** (Qwen + LoRA + pointer head) | Rev-4B zero-shot so với WaterSheep; fine-tune theo công thức Rev so với qwen3-8b LoRA; định tuyến intent Bitext (risk–coverage) | 07 |
 
 Ngôn ngữ dữ liệu: **tiếng Anh**. Mã nguồn chạy được trên CPU; phần LLM chạy trên **Google Colab GPU**.
 
@@ -31,6 +32,9 @@ src/drm/            thư viện dùng chung
   jev.py            decision model "System One": client Jev /v1/systemone (cache), adapter WaterSheep (mở) và Jev-like LLM, câu hỏi kiểm duyệt/đơn hàng/AHP
   nn_text.py        ANN huấn luyện từ đầu trên CPU: MLP (TF-IDF), fastText-style, TextCNN, BiGRU
   finetune.py       fine-tune transformer (encoder / LoRA LLM), embedding + LogReg, ghép mô hình tham lam (Colab GPU)
+  rev.py            decision model Rev/Kev: nạp checkpoint (base Qwen + LoRA + pointer head) như serve_local.py của Rev,
+                    adapter cùng định dạng Jev (noul/choice/score), batch, DRY_RUN giả lập; nhiệt độ, Platt, risk–coverage
+  rev_finetune.py   fine-tune theo công thức Rev (LoRA + pointer head, xáo thứ tự lựa chọn + KL nhất quán) trên task nb 06 và Bitext
 notebooks/
   01_text_moderation_benchmark.ipynb      CPU
   02_fraud_chargeback_cod.ipynb           CPU
@@ -38,6 +42,7 @@ notebooks/
   05_jev_zero_shot_decisions.ipynb        decision model zero-shot: WaterSheep (mở, miễn phí, mặc định) + Jev (nếu có credit)
   04_decision_models_cs_triage.ipynb      CPU
   06_finetune_ann_colab.ipynb             Colab GPU (A100): fine-tune ANN, mục tiêu ≥ 0.90
+  07_rev_qwen_decision_colab.ipynb        Colab GPU (A100 hoặc L4): Rev-4B zero-shot, fine-tune công thức Rev, định tuyến intent – chưa chạy
   appendix/A1, A2                         benchmark & MCDM trên 14 dataset UCI (phương pháp luận)
 scripts/            chạy benchmark từ dòng lệnh
 results/            kết quả (CSV, NPZ, hình) – đã chạy sẵn
@@ -55,8 +60,11 @@ Repo đã **public** nên Colab mở và clone được ngay, không cần token
 2. *(Tuỳ chọn, để đẩy kết quả từ Colab lên GitHub)*: **GitHub token**: Settings → Developer settings → *Fine-grained tokens*, chọn repo này, quyền **Contents: Read and write**.
 3. Trong Colab: biểu tượng **🔑 Secrets** ở thanh trái → thêm `HF_TOKEN` (và `GH_TOKEN` nếu cần) → bật *Notebook access*.
    Notebook 05: mặc định chạy **WaterSheep** (mã nguồn mở, miễn phí, không cần key; nên bật GPU). Có credit Jev thì thêm `TYPESAFE_API_KEY` để so sánh thêm Jev.
+   Notebook 07: Qwen3.5 và trọng số Rev không gated; `HF_TOKEN` là tuỳ chọn (tải nhanh hơn). Không cần key Jev: notebook không gọi Jev.
 4. Notebook 03: *Runtime → Change runtime type* → **A100** (lần chạy tham khảo: A100-SXM4-40GB, `BATCH = 32`) hoặc **L4** (`BATCH = 16`). T4 chạy được nhưng chậm.
    **Không chọn TPU**: code dùng PyTorch/CUDA, trên TPU notebook sẽ chỉ chạy chế độ thử (DRY_RUN). Notebook 05 (WaterSheep) chỉ cần L4/T4.
+   Notebook 07: **A100** (4B bf16; 9B tự bật khi VRAM ≥ 38 GB) hoặc **L4** (4B; dưới 20 GB VRAM tự chuyển 4-bit). Kết quả lưu dần ở Google Drive `drm_results/rev`.
+   Muốn có paired bootstrap với qwen3-8b LoRA thì giữ file điểm nb 06 ở `drm_results/finetune` trên cùng Drive; không có thì notebook so với TF-IDF tính tại chỗ.
 5. Ô đầu tiên tự clone repo, cài thư viện và thêm `src/` vào path. Ở ô cuối, đặt `PUSH_RESULTS = True` để commit thư mục `results/` lên nhánh **`colab-results`** (sau đó mở PR vào `main`).
    Nếu chỉ lưu notebook (*File → Save a copy in GitHub*), các file kết quả sẽ không đi kèm. Khi đó dùng `python scripts/extract_notebook_results.py` để trích bảng từ output đã lưu.
 

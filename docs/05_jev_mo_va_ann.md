@@ -9,7 +9,7 @@ Hướng khả thi có ba bước. Bước một là sửa thước đo. Đánh 
 
 Hiện có hơn 50 bản tái hiện Jev mở, nhưng chưa bản nào công bố kết quả trên sáu benchmark này. Bản mở mạnh nhất vẫn kém Jev khoảng 5 điểm trên một bộ đánh giá độc lập. Giá trị thật của họ mô hình này nằm ở ba điểm: xác suất hiệu chỉnh được bằng vài chục nhãn, độ bền trước né bộ lọc và khả năng khởi động lạnh. Nó không nằm ở PR-AUC. Toàn bộ công thức chạy trong khoảng 6–12 GPU-giờ trên một A100 40 GB của Colab (ước tính).
 
-Cuối cùng, mọi điểm benchmark chỉ là bằng chứng sàng lọc. Chuyển sang dữ liệu khác nguồn thường mất 20–35% PR-AUC. Vì vậy, mốc 0.90 cho chat CS phải được kiểm chứng trên một mẫu chat nội bộ có gán nhãn.
+Cuối cùng, mọi điểm benchmark chỉ là bằng chứng sàng lọc. Chuyển sang dữ liệu khác nguồn làm TF-IDF LogReg mất 11–56% PR-AUC (trung vị khoảng 23%, `results/text/cross_domain.csv`). Vì vậy, mốc 0.90 cho chat CS phải được kiểm chứng trên một mẫu chat nội bộ có gán nhãn.
 
 ## Trung bình 0.90 bất khả thi khi Davidson-hate kẹt ở trần 0.45–0.56
 
@@ -271,6 +271,6 @@ Câu hỏi "mô hình nào đưa 0.79 lên trên 0.90" hoá ra đặt sai chỗ.
 
 Mỗi hướng mô hình đều có vai trò và giới hạn riêng. Jev mở cho xác suất hiệu chỉnh và độ bền, không cho thứ hạng tốt hơn. Encoder fine-tune theo miền là xương sống. LLM LoRA và ensemble thêm một đến ba điểm nhờ đa dạng lỗi. ANN cổ điển chỉ còn là thành viên rẻ. Mục tiêu nên viết lại thành "đạt ít nhất 90% trần trên từng benchmark, báo cáo kèm tỉ lệ dương và khoảng tin cậy". Cách viết này trung thực và kiểm chứng được. Còn "trung bình trên 0.90" thì phụ thuộc vào việc chọn benchmark nào.
 
-Với chat CS e-commerce, bài học này càng quan trọng. Các lối tắt từ vựng giúp ăn điểm benchmark, như hashtag của HatEval hay từ điển slur của Davidson, chính là thứ không chuyển giao được. Đổi nguồn dữ liệu đã làm repo mất 20–35% PR-AUC ([báo cáo kết quả nội bộ](../docs/02_bao_cao_ket_qua.md)), và văn liệu ghi nhận mức sụt khoảng 30 điểm macro-F1 khi đánh giá chéo dataset hate ([Yin & Zubiaga](https://arxiv.org/pdf/2102.08886)). Ở tỉ lệ dương thực tế, AP còn có thể rơi xuống một chữ số phần trăm như HateDay cho thấy.
+Với chat CS e-commerce, bài học này càng quan trọng. Các lối tắt từ vựng giúp ăn điểm benchmark, như hashtag của HatEval hay từ điển slur của Davidson, chính là thứ không chuyển giao được. Đổi nguồn dữ liệu đã làm repo mất 11–56% PR-AUC ([báo cáo kết quả nội bộ](../docs/02_bao_cao_ket_qua.md)), và văn liệu ghi nhận mức sụt khoảng 30 điểm macro-F1 khi đánh giá chéo dataset hate ([Yin & Zubiaga](https://arxiv.org/pdf/2102.08886)). Ở tỉ lệ dương thực tế, AP còn có thể rơi xuống một chữ số phần trăm như HateDay cho thấy.
 
 Vì vậy, sau notebook 06, phần lớn ngân sách nên chuyển từ GPU-giờ cho benchmark sang hai việc. Việc thứ nhất là gán nhãn một mẫu chat CS nội bộ, có đo độ đồng thuận và chủ động lấy mẫu các ca offensive nhưng không hate. Việc thứ hai là dùng LLM LoRA tốt nhất làm teacher để chưng cất xuống một encoder đủ nhanh cho thời gian thực. Đó cũng là nơi lời hứa "xác suất đã hiệu chỉnh" của họ Jev thực sự có giá trị: tầng triage Bayes, nơi xác suất quyết định chi phí, chứ không phải bảng xếp hạng PR-AUC.

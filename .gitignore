@@ -11,3 +11,7 @@ results/jev_dryrun/
 research_notes/
 reports/
 results/finetune_dryrun/
+
+# dữ liệu nội bộ (chat CS, đơn hàng) chỉ để trên máy, không commit
+data/internal/
+results/rev_dryrun/
